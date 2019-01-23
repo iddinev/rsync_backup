@@ -1,0 +1,11 @@
+[Unit]
+Description=rsync backup service
+
+[Service]
+ProtectSystem=strict
+ReadWritePaths=/mnt/storage/pi_backups
+Type=oneshot
+ExecStart=/usr/local/sbin/rsync_backup --backup
+ExecStartPost=/bin/echo "rsync backup successfully finished"
+
+

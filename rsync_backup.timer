@@ -1,0 +1,8 @@
+[Unit]
+Description=Weekly rsync backup
+
+[Timer]
+OnCalendar=Sun *-*-* 23:50
+
+[Install]
+WantedBy=timers.target

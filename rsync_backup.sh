@@ -7,7 +7,7 @@ RESTORE_TARGET_PATH="$SOURCE_PATH"
 STORAGE_PATH="/mnt/storage/pi_backups/"
 RSYNC_BACKUP_PREFIX="rsync_weekly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
-RSYNC_BACKUP_OPTIONS=("-aHv" "--delete"
+RSYNC_BACKUP_OPTIONS=("-aH" "--delete"
 "--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/boot/*"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
 DATE_FORMAT="%Y-%B-%d"
@@ -60,7 +60,7 @@ function count_rsync_backup()
 {
 	rc_val=-1
 
-	num_backups=$(ls -1dqt "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | wc -l)
+	num_backups=$(ls -1dq "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | wc -l)
 	if [ -n "$num_backups" ]; then
 		rc_val="$num_backups"
 	fi
@@ -75,12 +75,16 @@ function rotate_rsync_backup()
 	num_backups="$(count_rsync_backup)"
 	ret_code=$?
 
-	if [ "$ret_code" -eq 0 ] && [ "$num_backups" -gt "$MAX_BAKUPS" ]; then
-		mapfile -t backup_list < <(ls -dqt "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
-		for i in $(eval "echo {$MAX_BAKUPS..$num_backups}"); do
-			rm -rf "${backup_list[i]}"
-		done
-		rc_code=0
+	if [ "$ret_code" -eq 0 ] && [ "$num_backups" -ge 0 ]; then
+		if [ "$num_backups" -gt "$MAX_BAKUPS" ]; then
+			mapfile -t backup_list < <(ls -dqt "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
+			for i in $(eval "echo {$MAX_BAKUPS..$num_backups}"); do
+				rm -rf "${backup_list[i]}"
+			done
+			rc_code=0
+		else
+			rc_code=0
+		fi
 	fi
 
 	return "$rc_code"
