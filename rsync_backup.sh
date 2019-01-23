@@ -2,7 +2,7 @@
 
 
 
-#SOURCE_PATH="/"
+SOURCE_PATH="/"
 RESTORE_TARGET_PATH="$SOURCE_PATH"
 STORAGE_PATH="/mnt/storage/pi_backups/"
 RSYNC_BACKUP_PREFIX="rsync_weekly"
@@ -11,6 +11,7 @@ RSYNC_BACKUP_OPTIONS=("-aHv" "--delete"
 "--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/boot/*"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
 DATE_FORMAT="%Y-%B-%d"
+BACKUP_PATH="$RSYNC_BACKUP_MAIN_PATH"-"$(date +$DATE_FORMAT)"
 MAX_BAKUPS=2
 
 
@@ -23,15 +24,14 @@ function create_rsync_backup()
 	ret_code=$?
 
 	if [ "$ret_code" -eq 0 ]; then
-		backup_path="$RSYNC_BACKUP_MAIN_PATH"-"$(date +$DATE_FORMAT)"
 		if [ "$num_backups" -ge 0 ] && [ "$num_backups" -lt "$MAX_BAKUPS" ]; then
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$backup_path"; then
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$BACKUP_PATH"; then
 				rc_code=0
 			fi
 		elif [ "$num_backups" -ge "$MAX_BAKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$base_backup"; then
-				if mv "$base_backup" "$backup_path"; then
+				if mv "$base_backup" "$BACKUP_PATH"; then
 					rc_code=0
 				fi
 			fi
@@ -128,8 +128,15 @@ esac
 if [ "$m_backup" -eq 1 ]; then
 	create_rsync_backup
 	rc_code=$?
-	if [ "$rc_code" -eq 0 ] && rotate_rsync_backup; then
-		m_exit=0
+	if [ "$rc_code" -eq 0 ]; then
+		if rotate_rsync_backup; then
+			m_exit=0
+		fi
+	else
+		if [ -d "$BACKUP_PATH" ]; then
+			rm -r "$BACKUP_PATH"
+		fi
+
 	fi
 elif [ -n "$m_restore" ] && restore_rsync_backup "$m_restore"; then
 	m_exit=0
