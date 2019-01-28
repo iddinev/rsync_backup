@@ -7,7 +7,7 @@ RESTORE_TARGET_PATH="$SOURCE_PATH"
 STORAGE_PATH="/mnt/storage/pi_backups/"
 RSYNC_BACKUP_PREFIX="rsync_weekly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
-RSYNC_BACKUP_OPTIONS=("-aH" "--delete"
+RSYNC_BACKUP_OPTIONS=("-aH" "--delete" "--numeric-ids"
 "--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/boot/*"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
 DATE_FORMAT="%Y-%B-%d"
@@ -102,6 +102,7 @@ function restore_rsync_backup()
 		if [ "$num_backups" -ge "$which_backup" ] && [ "$which_backup" -gt 0 ]; then
 			mapfile -t arr < <(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
 			backup="${arr[$((which_backup-1))]}"
+			echo "Restoring $backup"
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$backup" "$RESTORE_TARGET_PATH"; then
 				rc_code=0
 			fi
