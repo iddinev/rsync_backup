@@ -109,6 +109,7 @@ function restore_rsync_backup()
 			mapfile -t arr < <(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
 			backup="${arr[$((which_backup-1))]}"
 			echo "Restoring $backup"
+			sleep 5
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup" "$RESTORE_TARGET_PATH"; then
 				rc_code=0
 			fi
