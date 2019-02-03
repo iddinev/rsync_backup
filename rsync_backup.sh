@@ -68,6 +68,12 @@ function count_rsync_backup()
 	echo "$rc_val"
 }
 
+function list_rsync_backup()
+{
+	echo "Found the following backups:"
+	ls -dqt "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
+}
+
 function rotate_rsync_backup()
 {
 	rc_code=1
@@ -103,7 +109,7 @@ function restore_rsync_backup()
 			mapfile -t arr < <(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
 			backup="${arr[$((which_backup-1))]}"
 			echo "Restoring $backup"
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$backup" "$RESTORE_TARGET_PATH"; then
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup" "$RESTORE_TARGET_PATH"; then
 				rc_code=0
 			fi
 		fi	
@@ -117,20 +123,26 @@ function restore_rsync_backup()
 # MAIN
 
 m_exit=1
-m_backup=0
+m_action=0
 m_opt="$1"
 
 case $m_opt in
 	-b|--backup)
-	m_backup=1
+	m_action=1
 	;;
 	-r|--restore)
+	m_action=2
 	m_restore="$2"
 	;;
+	-l|--list)
+	m_action=3
+	;;
+
 esac
 
 
-if [ "$m_backup" -eq 1 ]; then
+case $m_action in
+	1)
 	create_rsync_backup
 	rc_code=$?
 	if [ "$rc_code" -eq 0 ]; then
@@ -143,9 +155,16 @@ if [ "$m_backup" -eq 1 ]; then
 		fi
 
 	fi
-elif [ -n "$m_restore" ] && restore_rsync_backup "$m_restore"; then
-	m_exit=0
-fi
+	;;
+	2)
+	if restore_rsync_backup "$m_restore"; then
+		m_exit=0
+	fi
+	;;
+	3)
+	list_rsync_backup
+	;;
+esac
 
 exit "$m_exit"
 
