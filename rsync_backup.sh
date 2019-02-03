@@ -4,7 +4,7 @@
 
 SOURCE_PATH="/"
 RESTORE_TARGET_PATH="$SOURCE_PATH"
-STORAGE_PATH="/mnt/storage/pi_backups/"
+STORAGE_PATH="/mnt/storage/pi_backup/rsync_backups/"
 RSYNC_BACKUP_PREFIX="rsync_weekly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
 RSYNC_BACKUP_OPTIONS=("-aH" "--delete" "--numeric-ids"

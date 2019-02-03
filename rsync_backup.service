@@ -3,7 +3,7 @@ Description=rsync backup service
 
 [Service]
 ProtectSystem=strict
-ReadWritePaths=/mnt/storage/pi_backups
+ReadWritePaths=/mnt/storage/pi_backup/rsync_backups
 Type=oneshot
 ExecStart=/usr/local/sbin/rsync_backup --backup
 
