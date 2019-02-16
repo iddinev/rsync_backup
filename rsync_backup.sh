@@ -4,7 +4,7 @@
 
 SOURCE_PATH="/"
 RESTORE_TARGET_PATH="$SOURCE_PATH"
-STORAGE_PATH="/mnt/storage/pi_backup/rsync_backups/"
+STORAGE_PATH="/mnt/storage/backups/pi_backup/rsync_backups/"
 RSYNC_BACKUP_PREFIX="rsync_weekly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
 RSYNC_BACKUP_OPTIONS=("-aH" "--delete" "--numeric-ids"
@@ -27,12 +27,20 @@ function create_rsync_backup()
 		if [ "$num_backups" -ge 0 ] && [ "$num_backups" -lt "$MAX_BAKUPS" ]; then
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$BACKUP_PATH"; then
 				rc_code=0
+			else
+				if [ -d "$BACKUP_PATH" ]; then
+					rm -r "$BACKUP_PATH"
+				fi
 			fi
 		elif [ "$num_backups" -ge "$MAX_BAKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$base_backup"; then
 				if mv "$base_backup" "$BACKUP_PATH"; then
 					rc_code=0
+				fi
+			else
+				if [ -d "$base_backup" ]; then
+					rm -r "$base_backup"
 				fi
 			fi
 		fi
@@ -150,11 +158,6 @@ case $m_action in
 		if rotate_rsync_backup; then
 			m_exit=0
 		fi
-	else
-		if [ -d "$BACKUP_PATH" ]; then
-			rm -r "$BACKUP_PATH"
-		fi
-
 	fi
 	;;
 	2)
