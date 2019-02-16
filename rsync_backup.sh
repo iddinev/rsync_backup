@@ -127,6 +127,23 @@ function restore_rsync_backup()
 	return "$rc_code"
 }
 
+function help_text
+{
+cat << _EOF_
+Usage:
+rsync_backup {-b | --backup} {-r | --restore <num>} {-l | --list} {-h | --help}
+
+-b | --backup           Create a backup as per configurations (requires sudo).
+-r | --restore <num>    Restore backup <num>: 1 - latest backup (requires sudo).
+-l | --list             Lists and numbers the available backups: 1 - latest backup.
+-h | --help             Show this help message.
+
+If you want to keep a particular backup, rename it so the script won't be able to list it,
+or copy it to another dir. For restoring the file name should start with the backup prefix,
+so the script can list/use it.
+_EOF_
+}
+
 
 
 # MAIN
@@ -146,9 +163,14 @@ case $m_opt in
 	-l|--list)
 	m_action=3
 	;;
+	-h|--help)
+	m_action=4
+	;;
+	*)
+	m_action=5
+	;;
 
 esac
-
 
 case $m_action in
 	1)
@@ -167,6 +189,14 @@ case $m_action in
 	;;
 	3)
 	list_rsync_backup
+	;;
+	4)
+	help_text
+	m_exit=0
+	;;
+	5)
+	help_text
+	m_exit=1
 	;;
 esac
 
