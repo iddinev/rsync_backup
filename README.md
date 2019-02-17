@@ -1,5 +1,5 @@
-# Raspberry rsync script
-## Rudimentary script + systemd timer/service to do incremental rsync rootfs backups to a mounted storage.
+# Rudimentary rsync backup/restore script
+## Script + systemd timer/service to do incremental rsync rootfs backups to a mounted storage.
 
 The script keeps and rotates several backups. It can be configured to keep a preset amount of backups, and when it reaches that number it starts using the oldest backup as the incremental base for the new one - this is done to minimize the backup creation time and read/writes needed. Automatically deletes the new backup dir if the backup fails for some reason.
 Script is configured through internal variables.
