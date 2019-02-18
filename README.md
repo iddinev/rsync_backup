@@ -15,6 +15,9 @@ rsync_backup {-b | --backup} {-r | --restore <num>} {-h | --help}
 
 If you want to keep a particular backup, rename it so the script won't be able to list it,
 or copy it to another dir.\
+NOTE:
+If you need to copy a backup, use the same rsync command as the script
+to preserve the attributes.\
 For restoring, the file name should start with the backup prefix,
 so the script can list/use it.
   

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
 
-
+# The source & storage path should always end with '/'.
 SOURCE_PATH="/"
 RESTORE_TARGET_PATH="$SOURCE_PATH"
 STORAGE_PATH="/mnt/storage/backups/pi_backup/rsync_backups/"
 RSYNC_BACKUP_PREFIX="rsync_weekly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
-RSYNC_BACKUP_OPTIONS=("-aH" "--delete" "--numeric-ids"
+RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids"
 "--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/boot/*"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
-DATE_FORMAT="%Y-%B-%d"
+DATE_FORMAT="%Y-%b-%d-%H-%M-%S"
 BACKUP_PATH="$RSYNC_BACKUP_MAIN_PATH"-"$(date +$DATE_FORMAT)"
 MAX_BAKUPS=2
 
@@ -27,6 +27,8 @@ function create_rsync_backup()
 		if [ "$num_backups" -ge 0 ] && [ "$num_backups" -lt "$MAX_BAKUPS" ]; then
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$BACKUP_PATH"; then
 				rc_code=0
+				# Touch the new backup to update it's modify time.
+				touch "$BACKUP_PATH"
 			else
 				if [ -d "$BACKUP_PATH" ]; then
 					rm -r "$BACKUP_PATH"
@@ -37,6 +39,8 @@ function create_rsync_backup()
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$base_backup"; then
 				if mv "$base_backup" "$BACKUP_PATH"; then
 					rc_code=0
+					# Touch the new backup to update it's modify time.
+					touch "$BACKUP_PATH"
 				fi
 			else
 				if [ -d "$base_backup" ]; then
@@ -139,8 +143,9 @@ rsync_backup {-b | --backup} {-r | --restore <num>} {-l | --list} {-h | --help}
 -h | --help             Show this help message.
 
 If you want to keep a particular backup, rename it so the script won't be able to list it,
-or copy it to another dir. For restoring the file name should start with the backup prefix,
-so the script can list/use it.
+or copy it to another dir. If you need to copy a backup, use the same rsync command as
+the script to preserve the attributes. For restoring, the file name should start with
+the backup prefix, so the script can list/use it.
 _EOF_
 }
 
