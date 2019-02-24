@@ -4,15 +4,17 @@
 # The source & storage path should always end with '/'.
 SOURCE_PATH="/"
 RESTORE_TARGET_PATH="$SOURCE_PATH"
-STORAGE_PATH="/mnt/storage/backups/pi_backup/rsync_backups/"
-RSYNC_BACKUP_PREFIX="rsync_weekly"
+STORAGE_PATH="/mnt/backup/backup_root/"
+RSYNC_BACKUP_PREFIX="rsync_monthly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
-RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids"
-"--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/boot/*"
+RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids" "--exclude=/lost+found"
+"--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/home/*"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
 DATE_FORMAT="%Y-%b-%d-%H-%M-%S"
-BACKUP_PATH="$RSYNC_BACKUP_MAIN_PATH"-"$(date +$DATE_FORMAT)"
-MAX_BAKUPS=2
+TIMESTAMP="$(date +$DATE_FORMAT)"
+BACKUP_PATH="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
+TIMESTAMP_FILE="BACKUP-TIMESTAMP"
+MAX_BAKUPS=1
 
 
 
@@ -50,6 +52,10 @@ function create_rsync_backup()
 		fi
 	fi
 
+	if [ "$rc_code" -eq 0 ] && [ -d "$BACKUP_PATH" ]; then
+		echo "$TIMESTAMP" > "$BACKUP_PATH"/"$TIMESTAMP_FILE"
+	fi
+
 	return "$rc_code"
 }
 
@@ -83,7 +89,7 @@ function count_rsync_backup()
 function list_rsync_backup()
 {
 	echo "Found the following backups:"
-	ls -dqt "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
+	ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
 }
 
 function rotate_rsync_backup()
