@@ -2,7 +2,8 @@
 
 
 # The source & storage path should always end with '/'.
-SOURCE_PATH="/"
+SOURCE_PATH="/mnt/backup/test_source_dir/"
+#SOURCE_PATH="/"
 RESTORE_TARGET_PATH="$SOURCE_PATH"
 STORAGE_PATH="/mnt/backup/backup_root/"
 RSYNC_BACKUP_PREFIX="rsync_monthly"
