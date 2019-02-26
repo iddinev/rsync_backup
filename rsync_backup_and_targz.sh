@@ -143,10 +143,10 @@ function get_latest_rsync_backup()
 function gpg2_encrypt()
 {
 	l_ret_code=1
-	mapfile -t l_backup_list < <(ls -dqtr "$BACKUP_TARGZ_DIR"* 2>/dev/null)
+	mapfile -t l_backup_list < <(ls -dqt "$BACKUP_TARGZ_DIR"* 2>/dev/null)
 	if [ "${#l_backup_list[@]}" -ge 1 ] && [ -r "$GPG_PASS_FILE" ]; then
 		l_backup_file="${l_backup_list[0]}"
-		if gpg2 --batch -c --cipher-algo AES256 -passphrase-file "$GPG_PASS_FILE" -o "${l_backup_filer}${BACKUP_GPG_SUFFIX}" ; then
+		if gpg2 --batch -c --cipher-algo AES256 --passphrase-file "$GPG_PASS_FILE" -o "${l_backup_file}${BACKUP_GPG_SUFFIX}" "$l_backup_file" ; then
 			log_systemd "gpg2 $l_backup_file successfull."
 			l_ret_code=0
 		fi
@@ -164,7 +164,7 @@ function targz_backup()
 	if [ "$l_latest_backup" != "-1" ] && [ "$l_latest_backup" != "" ] ; then
 		read l_timestamp < "$l_latest_backup""$TIMESTAMP_FILE"
 		l_targz_file="${BACKUP_TARGZ_DIR}${BACKUP_TARGZ_PREFIX}${l_timestamp}${BACKUP_TARGZ_SUFFIX}"
-		if tar -zcf "$l_targz_file" "$l_latest_backup"; then
+		if tar -zcf "$l_targz_file" "$l_latest_backup" 1>/dev/null; then
 			log_systemd "Created $l_targz_file ."
 			l_ret_code=0
 		fi
@@ -176,7 +176,7 @@ function targz_backup()
 function scp_backup()
 {
 	l_ret_code=1
-	mapfile -t l_backup_list < <(ls -dqtr "$BACKUP_TARGZ_DIR"* 2>/dev/null)
+	mapfile -t l_backup_list < <(ls -dqt "$BACKUP_TARGZ_DIR"* 2>/dev/null)
 	if [ "${#l_backup_list[@]}" -ge 1 ]; then
 		l_backup_file="${l_backup_list[0]}"
 		if scp "$l_backup_file" "$SSH_USER"@"$SSH_HOST":"$REMOTE_BACKUP_DIR"; then
@@ -218,8 +218,7 @@ if [ "$m_exit" -eq 0 ]; then
 fi
 
 if [ "$m_exit" -eq 0 ]; then
-	#if gpg2_encrypt && scp_backup && rotate_scp_backup; then
-	if scp_backup && rotate_scp_backup; then
+	if gpg2_encrypt && scp_backup && rotate_scp_backup; then
 		m_exit=0
 	else
 		m_exit=1
