@@ -1,34 +1,25 @@
 #!/usr/bin/env bash
 
+SCRIPTNAME="$(basename "$0")"
+SCRIPTPATH="$(dirname "$(readlink -f "$0")")"
 
-# The source & storage path should always end with '/'.
-SOURCE_PATH="/"
-RESTORE_TARGET_PATH="$SOURCE_PATH"
-STORAGE_PATH="/mnt/backup/backup_root/"
-RSYNC_BACKUP_PREFIX="rsync_monthly"
-RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
-RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids" "--exclude=/lost+found"
-"--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/home/*"
-"--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
-DATE_FORMAT="%Y-%b-%d-%H-%M-%S"
-TIMESTAMP="$(date +$DATE_FORMAT)"
-BACKUP_PATH="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
-TIMESTAMP_FILE="BACKUP-TIMESTAMP"
-MAX_BAKUPS=1
-
-
+source "${SCRIPTPATH}/backup.conf"
+source "${SCRIPTPATH}/common_lib.sh"
 
 function create_rsync_backup()
 {
-	rc_code=1
+	local ret_code=1
+	local num_backup
+	local cmd_code
+    local base_backup
 
-	num_backups="$(count_rsync_backup)"
-	ret_code=$?
+	num_backup="$(count_rsync_backup)"
+	cmd_code="$?"
 
-	if [ "$ret_code" -eq 0 ]; then
-		if [ "$num_backups" -ge 0 ] && [ "$num_backups" -lt "$MAX_BAKUPS" ]; then
+	if [ "$cmd_code" -eq 0 ]; then
+		if [ "$num_backup" -ge 0 ] && [ "$num_backup" -lt "$MAX_BACKUPS" ]; then
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$BACKUP_PATH"; then
-				rc_code=0
+				ret_code=0
 				# Touch the new backup to update it's modify time.
 				touch "$BACKUP_PATH"
 			else
@@ -36,11 +27,11 @@ function create_rsync_backup()
 					rm -r "$BACKUP_PATH"
 				fi
 			fi
-		elif [ "$num_backups" -ge "$MAX_BAKUPS" ]; then
+		elif [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH" "$base_backup"; then
 				if mv "$base_backup" "$BACKUP_PATH"; then
-					rc_code=0
+					ret_code=0
 					# Touch the new backup to update it's modify time.
 					touch "$BACKUP_PATH"
 				fi
@@ -52,23 +43,29 @@ function create_rsync_backup()
 		fi
 	fi
 
-	if [ "$rc_code" -eq 0 ] && [ -d "$BACKUP_PATH" ]; then
+	if [ "$ret_code" -eq 0 ] && [ -d "$BACKUP_PATH" ]; then
 		echo "$TIMESTAMP" > "$BACKUP_PATH"/"$TIMESTAMP_FILE"
+        log_systemd "Created new backup: $BACKUP_PATH ."
+    else
+        log_systemd "Created new backup: $BACKUP_PATH - FAILED ."
 	fi
 
-	return "$rc_code"
+	return "$ret_code"
 }
 
 function get_oldest_rsync_backup()
 {
-	ret_val=-1
+	local ret_val=-1
+	local num_backup
+	local cmd_code
+    local backup_list=()
 
-	num_backups="$(count_rsync_backup)"
-	ret_code=$?
+	num_backup="$(count_rsync_backup)"
+    cmd_code="$?"
 
-	if [ "$ret_code" -eq 0 ] && [ "$num_backups" -ge "$MAX_BAKUPS" ]; then
-		mapfile -t arr < <(ls -dqtr "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
-		ret_val="${arr[0]}"
+	if [ "$cmd_code" -eq 0 ] && [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
+		mapfile -t backup_list < <(ls -dqtr "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
+		ret_val="${backup_list[0]}"
 	fi
 
 	echo "$ret_val"
@@ -76,14 +73,14 @@ function get_oldest_rsync_backup()
 
 function count_rsync_backup()
 {
-	rc_val=-1
+	local ret_val=-1
+	local list_cmd="ls -1dq ${RSYNC_BACKUP_MAIN_PATH}*"
+	local ret_val
+	ret_val="$(_count_backup "$list_cmd")"
 
-	num_backups=$(ls -1dq "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | wc -l)
-	if [ -n "$num_backups" ]; then
-		rc_val="$num_backups"
-	fi
+	ret_val="${ret_val:--1}"
 
-	echo "$rc_val"
+	echo "$ret_val"
 }
 
 function list_rsync_backup()
@@ -94,47 +91,49 @@ function list_rsync_backup()
 
 function rotate_rsync_backup()
 {
-	rc_code=1
+	local ret_code=1
+	local num_backup="count_rsync_backup"
+	local list_cmd="ls -dqt ${RSYNC_BACKUP_MAIN_PATH}*"
+    local rm_backup="rm -r"
 
-	num_backups="$(count_rsync_backup)"
-	ret_code=$?
+	(_rotate_backup "$num_backup" "$list_cmd" "$rm_backup")
+	ret_code="${?:-1}"
 
-	if [ "$ret_code" -eq 0 ] && [ "$num_backups" -ge 0 ]; then
-		if [ "$num_backups" -gt "$MAX_BAKUPS" ]; then
-			mapfile -t backup_list < <(ls -dqt "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
-			for i in $(eval "echo {$MAX_BAKUPS..$num_backups}"); do
-				rm -rf "${backup_list[i]}"
-			done
-			rc_code=0
-		else
-			rc_code=0
-		fi
-	fi
-
-	return "$rc_code"
+	return "$ret_code"
 }
 
 function restore_rsync_backup()
 {
-	rc_code=1
-	which_backup=${1:-0}
-	
-	num_backups="$(count_rsync_backup)"
-	ret_code=$?
+	local ret_code=1
+	local which_backup="${1:-0}"
+	local num_backup
+	local cmd_code
+    local backup_list=()
+    local backup
 
-	if [ "$ret_code" -eq 0 ]; then
-		if [ "$num_backups" -ge "$which_backup" ] && [ "$which_backup" -gt 0 ]; then
-			mapfile -t arr < <(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
-			backup="${arr[$((which_backup-1))]}"
-			echo "Restoring $backup"
+	num_backup="$(count_rsync_backup)"
+    cmd_code="$?"
+
+
+    log_systemd "Starting system restore."
+	if [ "$cmd_code" -eq 0 ]; then
+		if [ "$num_backup" -ge "$which_backup" ] && [ "$which_backup" -gt 0 ]; then
+			mapfile -t backup_list < <(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
+			backup="${backup_list[$((which_backup-1))]}"
+			echo "Restoring $backup ."
+            log_systemd "Restoring $backup ."
+            # A moment of silence before your system breaks down completely.
 			sleep 5
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup" "$RESTORE_TARGET_PATH"; then
-				rc_code=0
+				ret_code=0
+                log_systemd "Restored $backup ."
+            else
+                log_systemd "Restoring $backup - FAILED."
 			fi
-		fi	
+		fi
 	fi
 
-	return "$rc_code"
+	return "$ret_code"
 }
 
 function help_text
@@ -157,7 +156,7 @@ _EOF_
 
 
 
-# MAIN
+### MAIN
 
 m_exit=1
 m_action=0
@@ -186,8 +185,8 @@ esac
 case $m_action in
 	1)
 	create_rsync_backup
-	rc_code=$?
-	if [ "$rc_code" -eq 0 ]; then
+	ret_code=$?
+	if [ "$ret_code" -eq 0 ]; then
 		if rotate_rsync_backup; then
 			m_exit=0
 		fi
@@ -213,4 +212,4 @@ esac
 
 exit "$m_exit"
 
-# END
+### END

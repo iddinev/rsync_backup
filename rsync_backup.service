@@ -1,5 +1,5 @@
 [Unit]
-Description=rsync backup service
+Description=rsync backup to local storage service
 
 [Service]
 ProtectSystem=strict

@@ -1,5 +1,5 @@
 [Unit]
-Description=Weekly rsync backup
+Description=Weekly rsync backup to local storage
 
 [Timer]
 OnCalendar=Sun *-*-* 23:50
