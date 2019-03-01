@@ -11,7 +11,7 @@ function _count_backup()
 {
 	local ret_val=-1
 	local list_cmd="${1:-None}"
-    local num_backup
+	local num_backup
 
 	if [ "$list_cmd" != "None" ]; then
 		num_backup="$(true && $list_cmd 2>/dev/null | wc -l)"
@@ -29,10 +29,11 @@ function _rotate_backup()
 	local count_cmd="${1:-None}"
 	local list_cmd="${2:-None}"
 	local rm_cmd="${3:-None}"
-    local host="${4:-local}"
-    local num_backup
-    local backup_list=()
-    local cmd_code
+	local host="${4:-local}"
+	local num_backup
+	local backup_list=()
+	local cmd_code
+	local msg
 
 	if [ "$count_cmd" != "None" ] && [ "$list_cmd" != "None" ]\
 	&& [ "$rm_cmd" != "None" ]; then
@@ -44,7 +45,8 @@ function _rotate_backup()
 				mapfile -t backup_list < <($list_cmd 2>/dev/null)
 				for i in $(eval "echo {$MAX_BACKUPS..$((num_backup-1))}"); do
 					if ($rm_cmd "${backup_list[i]}"); then
-						log_systemd "Rotating away on $host, ${backup_list[i]} ."
+						msg="Rotating away on $host, ${backup_list[i]} ."
+						log_systemd "$msg"
 					fi
 
 
@@ -56,9 +58,9 @@ function _rotate_backup()
 		fi
 	fi
 
-    if [ "$ret_code" != "0" ]; then
-            log_systemd "Initiate rotation - FAILED."
-    fi
+	if [ "$ret_code" != "0" ]; then
+		log_systemd "Initiate rotation - FAILED."
+	fi
 
 	return "$ret_code"
 }
