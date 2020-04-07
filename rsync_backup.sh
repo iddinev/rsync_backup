@@ -18,24 +18,24 @@ function create_rsync_backup()
 
 	if [ "$cmd_code" -eq 0 ]; then
 		if [ "$num_backup" -ge 0 ] && [ "$num_backup" -lt "$MAX_BACKUPS" ]; then
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH"\
-			"$BACKUP_PATH"; then
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR"\
+			"$BACKUP_DIR"; then
 				ret_code=0
 				# Touch the new backup to update it's modify time.
-				touch "$BACKUP_PATH"
+				touch "$BACKUP_DIR"
 			else
-				if [ -d "$BACKUP_PATH" ]; then
-					rm -r "$BACKUP_PATH"
+				if [ -d "$BACKUP_DIR" ]; then
+					rm -r "$BACKUP_DIR"
 				fi
 			fi
 		elif [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_PATH"\
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR"\
 			"$base_backup"; then
-				if mv "$base_backup" "$BACKUP_PATH"; then
+				if mv "$base_backup" "$BACKUP_DIR"; then
 					ret_code=0
 					# Touch the new backup to update it's modify time.
-					touch "$BACKUP_PATH"
+					touch "$BACKUP_DIR"
 				fi
 			else
 				if [ -d "$base_backup" ]; then
@@ -45,11 +45,11 @@ function create_rsync_backup()
 		fi
 	fi
 
-	if [ "$ret_code" -eq 0 ] && [ -d "$BACKUP_PATH" ]; then
-		echo "$TIMESTAMP" > "$BACKUP_PATH"/"$TIMESTAMP_FILE"
-		log_systemd "Created new backup: $BACKUP_PATH ."
+	if [ "$ret_code" -eq 0 ] && [ -d "$BACKUP_DIR" ]; then
+		echo "$TIMESTAMP" > "$BACKUP_DIR""$TIMESTAMP_FILE"
+		log_systemd "Created new backup: $BACKUP_DIR ."
 	else
-		log_systemd "Created new backup: $BACKUP_PATH - FAILED ."
+		log_systemd "Created new backup: $BACKUP_DIR - FAILED ."
 	fi
 
 	return "$ret_code"

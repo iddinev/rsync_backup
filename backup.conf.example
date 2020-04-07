@@ -1,12 +1,14 @@
+# Modify and rename to backup.conf
+
 # COMMON
 MAX_BACKUPS=2
 TIMESTAMP_FILE="BACKUP-TIMESTAMP"
 
 # BACKUP
-# All paths should end in '/'.
-SOURCE_PATH="/"
-RESTORE_TARGET_PATH="$SOURCE_PATH"
-STORAGE_PATH="/mnt/backup/backup_root/"
+# All 'DIR' should end in '/'.
+SOURCE_DIR="/"
+RESTORE_TARGET_DIR="$SOURCE_DIR"
+STORAGE_DIR="<STORAGE_DIR>"
 RSYNC_BACKUP_PREFIX="rsync_monthly"
 RSYNC_BACKUP_MAIN_PATH="$STORAGE_PATH""$RSYNC_BACKUP_PREFIX"
 RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids" "--exclude=/lost+found"
@@ -14,16 +16,16 @@ RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids" "--exclude=/lost+found"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
 DATE_FORMAT="%Y-%b-%d-%H-%M-%S"
 TIMESTAMP="$(date +$DATE_FORMAT)"
-BACKUP_PATH="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
+BACKUP_DIR="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"/
 
 # ARCHIVE & STORAGE
 BACKUP_SCRIPT="${SCRIPTPATH}/rsync_backup.sh"
-BACKUP_ARCHIVE_DIR="/home/idinev/Desktop/Projects/Code/rsync_backup/test/backup_archive/"
+BACKUP_ARCHIVE_DIR="<BACKUP_ARCHIVE_DIR>"
 BACKUP_GPG_ARCHIVE_DIR="$BACKUP_ARCHIVE_DIR"
 BACKUP_ARCHIVE_PREFIX="backup-"
 BACKUP_ARCHIVE_SUFFIX=".tar.gz"
 GPG_PASS_FILE="${SCRIPTPATH}/gpg_pass.txt"
 BACKUP_GPG_SUFFIX=".crypt"
-SSH_USER="root"
-SSH_HOST="mypi"
-REMOTE_BACKUP_DIR="/mnt/storage/backups/pc_backup/"
+SSH_USER="<SSH_USER>"
+SSH_HOST="<SSH_HOST>"
+REMOTE_BACKUP_DIR="<REMOTE_BACKUP_DIR>"
