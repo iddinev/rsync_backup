@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-SCRIPTNAME="$(basename "$0")"
-SCRIPTPATH="$(dirname "$(readlink -f "$0")")"
 
-source "${SCRIPTPATH}/backup.conf"
-source "${SCRIPTPATH}/common_lib.sh"
+
+SCRIPT_NAME="$(basename "$0")"
+SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
+CONF_PATH="${SCRIPT_PATH}/backup.conf"
+LIB_PATH="${SCRIPT_PATH}/common_lib.sh"
+
 
 
 function create_rsync_backup()
@@ -176,7 +178,27 @@ function scp_backup()
 	return "$ret_code"
 }
 
+
 ### MAIN
+
+if [ "$TEST" ]; then
+	if ! [ -r "end2end.conf" ]; then
+		echo "Missing end2end.conf"
+		echo 
+		m_action=5
+	else
+		source "end2end.conf"
+else
+	if ! [ -r "${CONF_PATH}" ]; then
+		echo "Missing $CONF_PATH"
+		echo 
+		m_action=5
+	else
+		source "$CONF_PATH"
+	fi
+fi
+
+source "$LIB_PATH"
 
 m_exit=1
 

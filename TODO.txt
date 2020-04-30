@@ -1,0 +1,12 @@
+TESTING:
+- Check for space:
+	On archive dir.
+	On storage dir.
+- Check what happens when rotation backup fails.
+* - Backup rotation.
+- Script doesnt care if dir's end in '/' or not.
+	Consider using find + xargs (accumulate items for sorting)
+	How are paths in the .conf file created.
+* - Testable config (not easily).
+- Check listing order.
+- Check restoration choosing is correct.
