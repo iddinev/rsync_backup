@@ -21,7 +21,7 @@ function create_rsync_backup()
 
 	if [ "$cmd_code" -eq 0 ]; then
 		if [ "$num_backup" -ge 0 ] && [ "$num_backup" -lt "$MAX_BACKUPS" ]; then
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR"\
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR" \
 			"$BACKUP_DIR"; then
 				ret_code=0
 				# Touch the new backup to update it's modify time.
@@ -33,7 +33,7 @@ function create_rsync_backup()
 			fi
 		elif [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR"\
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR" \
 			"$base_backup"; then
 				if mv "$base_backup" "$BACKUP_DIR"; then
 					ret_code=0
@@ -49,7 +49,7 @@ function create_rsync_backup()
 	fi
 
 	if [ "$ret_code" -eq 0 ] && [ -d "$BACKUP_DIR" ]; then
-		echo "$TIMESTAMP" > "$BACKUP_DIR""$TIMESTAMP_FILE"
+		echo "$TIMESTAMP" > "$BACKUP_DIR"/"$TIMESTAMP_FILE"
 		log_systemd "Created new backup: $BACKUP_DIR ."
 	else
 		log_systemd "Created new backup: $BACKUP_DIR - FAILED ."
@@ -69,7 +69,7 @@ function get_oldest_rsync_backup()
 	cmd_code="$?"
 
 	if [ "$cmd_code" -eq 0 ] && [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
-		mapfile -t backup_list <\
+		mapfile -t backup_list < \
 		<(ls -dqtr "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
 		ret_val="${backup_list[0]}"
 	fi
@@ -123,16 +123,16 @@ function restore_rsync_backup()
 
 	log_systemd "Starting system restore."
 	if [ "$cmd_code" -eq 0 ]; then
-		if [ "$num_backup" -ge "$which_backup" ] &&\
+		if [ "$num_backup" -ge "$which_backup" ] && \ 
 		[ "$which_backup" -gt 0 ]; then
-			mapfile -t backup_list <\
+			mapfile -t backup_list < \
 			<(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
 			backup="${backup_list[$((which_backup-1))]}"
 			echo "Restoring $backup ."
 			log_systemd "Restoring $backup ."
 			# A moment of silence before your system breaks down completely.
 			sleep 5
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup"\
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup" \
 			"$RESTORE_TARGET_PATH"; then
 				ret_code=0
 				log_systemd "Restored $backup ."
@@ -211,6 +211,11 @@ else
 fi
 
 source "$LIB_PATH"
+
+
+# Gives resolved absolute path, gets rid of trailing slashes.
+RSYNC_BACKUP_MAIN_PATH="$(realpath -sm $STORAGE_DIR)"/"$RSYNC_BACKUP_PREFIX"
+BACKUP_DIR="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
 
 case $m_action in
 	1)
