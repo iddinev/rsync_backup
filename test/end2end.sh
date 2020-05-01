@@ -73,7 +73,20 @@ function _destroy_loop_dev()
 	return "$l_rc"
 }
 
-function test_setup()
+function test_teardown()
+{
+	local l_rc=1
+
+	for db in "${!TEST_MNT[@]}"; do
+		if rm -rf "${TEST_MNT[$db]}/*"; then
+			l_rc=0
+		fi
+	done
+
+	return "$l_rc"
+}
+
+function test_suite_setup()
 {
 	echo '~~~~~~~~~~~~~~'
 	echo "${FUNCNAME[0]}"
@@ -88,7 +101,7 @@ function test_setup()
 	return "$l_rc"
 }
 
-function test_teardown()
+function test_suite_teardown()
 {
 	echo '~~~~~~~~~~~~~~'
 	echo "${FUNCNAME[0]}"
@@ -171,6 +184,10 @@ function test_rotation()
 		l_rc=1
 	fi
 
+	if [ "$l_rc" -eq "0" ] && test_teardown; then
+		l_rc=0
+	fi
+
 	return "$l_rc"
 }
 
@@ -178,12 +195,17 @@ function test_rotation()
 
 ### MAIN
 
+if [[ "$TEST_MAIN_DIR" =~ 'root' ]]; then
+	echo "You really should change the TEST_MAIN_DIR var to something that doesn't match root."
+	exit 1
+fi
+
 case "$1" in
 	-c|--clean)
-		DEBUG="" test_teardown
+		DEBUG="" test_suite_teardown
 	;;
 	-a|--all)
-		test_setup && all_tests; test_teardown
+		test_suite_setup && all_tests; test_suite_teardown
 		echo '##############'
 		echo "Test result: $TEST_RESULT failed."
 		if [ "$TEST_RESULT" -ne "0" ]; then
