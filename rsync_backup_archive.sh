@@ -129,6 +129,9 @@ function gpg2_encrypt()
 		"$backup_file" ; then
 			log_systemd "gpg2 ${backup_file}${BACKUP_GPG_SUFFIX} successfull."
 			ret_code=0
+		else
+			rm "${backup_file}${BACKUP_GPG_SUFFIX}"
+			log_systemd "gpg2 ${backup_file}${BACKUP_GPG_SUFFIX} failed."
 		fi
 	else
 		log_systemd "Check if the gpg_pass file is readable."

@@ -6,8 +6,8 @@ TEST_MAIN_DIR="test_mnt"
 declare -A TEST_MNT
 TEST_MNT=(
 	[test_root.db]="$TEST_MAIN_DIR/root"
-	[test_storage.db]="$TEST_MAIN_DIR/backup_storage"
-	[test_archive.db]="$TEST_MAIN_DIR/backup_archive"
+	[test_storage.db]="$TEST_MAIN_DIR/storage"
+	[test_archive.db]="$TEST_MAIN_DIR/archive"
 )
 TEST_CONFIG_PATH="end2end.conf"
 TEST_RESULT=0
@@ -45,6 +45,16 @@ function _create_test_dirs()
 	local l_rc=1
 
 	for db in "${!TEST_MNT[@]}"; do
+		# Needed for the no space on archive test.
+		# if [[ "$db" =~ "archive" ]]; then
+			# if _create_loop_dev "$db" "${TEST_MNT[$db]}" 5M ; then
+				# l_rc=0
+			# fi
+		# else
+			# if _create_loop_dev "$db" "${TEST_MNT[$db]}" ; then
+				# l_rc=0
+			# fi
+		# fi
 		if _create_loop_dev "$db" "${TEST_MNT[$db]}" ; then
 			l_rc=0
 		fi
@@ -138,7 +148,8 @@ function all_tests()
 
 	local l_rc=1
 
-	for tst in "test_rotation test_restore test_archive_rotation"; do
+	for tst in "test_rotation test_restore test_archive_rotation \
+	test_no_space_storage test_no_space_archive"; do
 		if ! $tst; then
 			TEST_RESULT="$(($TEST_RESULT+1))"
 		fi
@@ -332,25 +343,27 @@ test_no_space_archive()
 
 	local l_rc=1
 	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+	local l_num_backups=0
+	local l_backup_pre=""
+	local l_backup_post=""
 
-	for ((i=1; i<=$MAX_BACKUPS; i++)); do
-		create_dummy_file "$i" "$l_tst_file"
+	# Sizes in the stuit setup and random file are such as that there is space for only
+	# 1 gpg archive.
+	if dd if=/dev/urandom of="$l_tst_file" bs=1M count=1 2>/dev/null; then
+		eval "$BACKUP_ARCHIVE_SCRIPT"
+		l_backup_pre="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_GPG_SUFFIX})"
 		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-	done
-
-	for ((i=$MAX_BACKUPS; i>=1; --i)); do
-		eval "$BACKUP_SCRIPT --restore $i"
-		content="$(cat $l_tst_file)"
-		# Last backup is oldest - has smalles number as file contnetn.
-		if [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
-			echo "Restoration failed at backup $i."
-			l_rc=1
-			break
-		else
+		eval "$BACKUP_ARCHIVE_SCRIPT"
+		l_num_backups="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_GPG_SUFFIX} | wc -l)"
+		l_backup_post="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_GPG_SUFFIX})"
+		if [ "$l_num_backups" -eq "1" ] && \
+		[ "$l_backup_pre" == "$l_backup_post" ]; then
 			l_rc=0
 		fi
-	done
+	fi
 
 	if [ "$l_rc" -eq "0" ] && test_teardown; then
 		l_rc=0

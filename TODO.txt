@@ -1,6 +1,6 @@
 TESTING:
 - Check for space:
-	On archive dir.
+*	On archive dir.
 *	On storage dir.
 - Check what happens when backup rotation fails.
 * - Backup rotation.
