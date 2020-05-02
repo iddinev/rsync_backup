@@ -20,7 +20,7 @@ function _create_loop_dev()
 	local l_rc=1
 	local l_db="$1"
 	local l_path="${2:-.}"
-	local l_size="${3:-20M}"
+	local l_size="${3:-5M}"
 	local l_loop="$(losetup -f)"
 
 	if ! [ "$DEBUG" ]; then
@@ -290,6 +290,75 @@ test_restore()
 	return "$l_rc"
 }
 
+test_no_space_storage()
+{
+	echo '@@'
+	echo "${FUNCNAME[0]}"
+
+	local l_rc=1
+	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+	local l_num_backups=0
+	local l_backup_pre=""
+	local l_backup_post=""
+
+
+	if dd if=/dev/zero of="$l_tst_file" bs=3M count=1 2>/dev/null; then
+		eval "$BACKUP_SCRIPT --backup"
+		l_backup_pre="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+		${RSYNC_BACKUP_PREFIX}*)"
+		sleep 1
+		eval "$BACKUP_SCRIPT --backup"
+		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+		${RSYNC_BACKUP_PREFIX}* | wc -l)"
+		l_backup_post="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+		${RSYNC_BACKUP_PREFIX}*)"
+		if [ "$l_num_backups" -eq "1" ] && \
+		[ "$l_backup_pre" == "$l_backup_post" ]; then
+			l_rc=0
+		fi
+	fi
+
+	if [ "$l_rc" -eq "0" ] && test_teardown; then
+		l_rc=0
+	fi
+
+	return "$l_rc"
+}
+
+test_no_space_archive()
+{
+	echo '@@'
+	echo "${FUNCNAME[0]}"
+
+	local l_rc=1
+	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+
+	for ((i=1; i<=$MAX_BACKUPS; i++)); do
+		create_dummy_file "$i" "$l_tst_file"
+		sleep 1
+		eval "$BACKUP_SCRIPT --backup"
+	done
+
+	for ((i=$MAX_BACKUPS; i>=1; --i)); do
+		eval "$BACKUP_SCRIPT --restore $i"
+		content="$(cat $l_tst_file)"
+		# Last backup is oldest - has smalles number as file contnetn.
+		if [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
+			echo "Restoration failed at backup $i."
+			l_rc=1
+			break
+		else
+			l_rc=0
+		fi
+	done
+
+	if [ "$l_rc" -eq "0" ] && test_teardown; then
+		l_rc=0
+	fi
+
+	return "$l_rc"
+}
+
 
 
 ### MAIN
@@ -333,6 +402,26 @@ case "$1" in
 	;;
 	--restore)
 		test_suite_setup && test_restore
+		TEST_RESULT="$?"
+		test_suite_teardown
+		echo '##############'
+		echo "Test result: $TEST_RESULT failed."
+		if [ "$TEST_RESULT" -ne "0" ]; then
+			exit 1
+		fi
+	;;
+	--no-storage)
+		test_suite_setup && test_no_space_storage
+		TEST_RESULT="$?"
+		test_suite_teardown
+		echo '##############'
+		echo "Test result: $TEST_RESULT failed."
+		if [ "$TEST_RESULT" -ne "0" ]; then
+			exit 1
+		fi
+	;;
+	--no-archive)
+		test_suite_setup && test_no_space_archive
 		TEST_RESULT="$?"
 		test_suite_teardown
 		echo '##############'

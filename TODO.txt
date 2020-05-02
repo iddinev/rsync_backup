@@ -1,7 +1,7 @@
 TESTING:
 - Check for space:
 	On archive dir.
-	On storage dir.
+*	On storage dir.
 - Check what happens when backup rotation fails.
 * - Backup rotation.
 * - Script doesnt care if dir's end in '/' or not.
