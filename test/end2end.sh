@@ -137,7 +137,7 @@ function all_tests()
 
 	local l_rc=1
 
-	for tst in "test_rotation"; do
+	for tst in "test_rotation test_restore"; do
 		if ! $tst; then
 			TEST_RESULT="$(($TEST_RESULT+1))"
 		fi
@@ -152,6 +152,8 @@ function all_tests()
 
 function test_rotation()
 {
+	# Main script always rotates by reusing the oldest backup as a base.
+	# Still this is tested explicitly.
 	echo '@@'
 	echo "${FUNCNAME[0]}"
 
@@ -191,6 +193,38 @@ function test_rotation()
 	return "$l_rc"
 }
 
+test_restore()
+{
+	echo '@@'
+	echo "${FUNCNAME[0]}"
+
+	local l_rc=1
+	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+
+	for ((i=1; i<=$MAX_BACKUPS; i++)); do
+		create_dummy_file "$i" "$l_tst_file"
+		sleep 1
+		eval "$BACKUP_SCRIPT --backup"
+	done
+
+	for ((i=$MAX_BACKUPS; i>=1; --i)); do
+		eval "$BACKUP_SCRIPT --restore $i"
+		content="$(cat $l_tst_file)"
+		if [ "$content" -ne "$i" ]; then
+			echo "Restoration failed at backup $i."
+			break
+		else
+			l_rc=0
+		fi
+	done
+
+	if [ "$l_rc" -eq "0" ] && test_teardown; then
+		l_rc=0
+	fi
+
+	return "$l_rc"
+}
+
 
 
 ### MAIN
@@ -206,6 +240,26 @@ case "$1" in
 	;;
 	-a|--all)
 		test_suite_setup && all_tests; test_suite_teardown
+		echo '##############'
+		echo "Test result: $TEST_RESULT failed."
+		if [ "$TEST_RESULT" -ne "0" ]; then
+			exit 1
+		fi
+	;;
+	--rotate)
+		test_suite_setup && test_rotation
+		TEST_RESULT="$?"
+		test_suite_teardown
+		echo '##############'
+		echo "Test result: $TEST_RESULT failed."
+		if [ "$TEST_RESULT" -ne "0" ]; then
+			exit 1
+		fi
+	;;
+	--restore)
+		test_suite_setup && test_restore
+		TEST_RESULT="$?"
+		test_suite_teardown
 		echo '##############'
 		echo "Test result: $TEST_RESULT failed."
 		if [ "$TEST_RESULT" -ne "0" ]; then

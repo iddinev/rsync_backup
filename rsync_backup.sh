@@ -33,6 +33,7 @@ function create_rsync_backup()
 			fi
 		elif [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
+			log_systemd "MAX_BACKUPS ($MAX_BACKUPS) reached, using $base_backup as base (rotating it)."
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR" \
 			"$base_backup"; then
 				if mv "$base_backup" "$BACKUP_DIR"; then
@@ -50,9 +51,9 @@ function create_rsync_backup()
 
 	if [ "$ret_code" -eq 0 ] && [ -d "$BACKUP_DIR" ]; then
 		echo "$TIMESTAMP" > "$BACKUP_DIR"/"$TIMESTAMP_FILE"
-		log_systemd "Created new backup: $BACKUP_DIR ."
+		log_systemd "Created new backup: $BACKUP_DIR."
 	else
-		log_systemd "Created new backup: $BACKUP_DIR - FAILED ."
+		log_systemd "Created new backup: $BACKUP_DIR - FAILED."
 	fi
 
 	return "$ret_code"
@@ -92,18 +93,19 @@ function count_rsync_backup()
 function list_rsync_backup()
 {
 	echo "Found the following backups:"
-	ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
+	ls -dqtrF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
 }
 
 function rotate_rsync_backup()
 {
 	local ret_code=1
 	local num_backup="count_rsync_backup"
-	local list_cmd="ls -dqt ${RSYNC_BACKUP_MAIN_PATH}*"
+	# Backups are sorted by mtime, oldest last.
+	local list_cmd="ls -dqtr ${RSYNC_BACKUP_MAIN_PATH}*"
 	local rm_backup="rm -r"
 
 	(_rotate_backup "$num_backup" "$list_cmd" "$rm_backup")
-	ret_code="${?:-1}"
+	ret_code="$?"
 
 	return "$ret_code"
 }
@@ -123,22 +125,25 @@ function restore_rsync_backup()
 
 	log_systemd "Starting system restore."
 	if [ "$cmd_code" -eq 0 ]; then
-		if [ "$num_backup" -ge "$which_backup" ] && \ 
-		[ "$which_backup" -gt 0 ]; then
-			mapfile -t backup_list < \
-			<(ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null)
-			backup="${backup_list[$((which_backup-1))]}"
-			echo "Restoring $backup ."
-			log_systemd "Restoring $backup ."
+		mapfile -t backup_list < \
+		<(list_rsync_backup | cut -f 2)
+		if [ "$num_backup" -gt 0 ] && [ "$which_backup" -gt 0 ] && \
+			[ "$which_backup" -le "$num_backup" ]; then
+			backup="${backup_list[$((which_backup))]}"
+			echo "Restoring $backup to $RESTORE_DIR."
+			log_systemd "Restoring $backup to $RESTORE_DIR."
 			# A moment of silence before your system breaks down completely.
 			sleep 5
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup" \
-			"$RESTORE_TARGET_PATH"; then
+			"$RESTORE_DIR"; then
 				ret_code=0
-				log_systemd "Restored $backup ."
+				log_systemd "Restored $backup to $RESTORE_DIR."
 			else
-				log_systemd "Restoring $backup - FAILED."
+				log_systemd "Restoring $backup to $RESTORE_DIR - FAILED."
 			fi
+		else
+			log_systemd "Available backups: ${backup_list[@]}."
+			log_systemd "Invalid backup selection $which_backup."
 		fi
 	fi
 

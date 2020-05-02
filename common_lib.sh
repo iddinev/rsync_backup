@@ -25,6 +25,7 @@ function _count_backup()
 
 function _rotate_backup()
 {
+	# 'list_cmd' should give (mtime) sorted output.
 	local ret_code=1
 	local count_cmd="${1:-None}"
 	local list_cmd="${2:-None}"
@@ -48,8 +49,6 @@ function _rotate_backup()
 						msg="Rotating away on $host, ${backup_list[i]} ."
 						log_systemd "$msg"
 					fi
-
-
 				done
 				ret_code=0
 			else

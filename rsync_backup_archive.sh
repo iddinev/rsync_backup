@@ -148,7 +148,7 @@ function targz_backup()
 
 	if [ "$latest_backup" != "-1" ] && [ "$latest_backup" != "" ] ; then
 		read -r timestamp < "$latest_backup""$TIMESTAMP_FILE"
-		targz_file="${BACKUP_ARCHIVE_DIR}${BACKUP_ARCHIVE_PREFIX}${timestamp}"
+		targz_file="${BACKUP_ARCHIVE_DIR}/${BACKUP_ARCHIVE_PREFIX}${timestamp}"
 		targz_file="${targz_file}${BACKUP_ARCHIVE_SUFFIX}"
 		if tar -zcf "$targz_file" "$latest_backup" 1>/dev/null 2>&1; then
 			log_systemd "Created $targz_file ."
@@ -180,6 +180,10 @@ function scp_backup()
 
 
 ### MAIN
+
+BACKUP_ARCHIVE_DIR="$(realpath -sm $BACKUP_ARCHIVE_DIR)"
+BACKUP_GPG_ARCHIVE_DIR="$(realpath -sm $BACKUP_GPG_ARCHIVE_DIR)"
+REMOTE_BACKUP_DIR="$(realpath -sm $REMOTE_BACKUP_DIR)"
 
 if [ "$TEST" ]; then
 	if ! [ -r "end2end.conf" ]; then

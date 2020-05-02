@@ -5,18 +5,15 @@ MAX_BACKUPS=2
 TIMESTAMP_FILE="BACKUP-TIMESTAMP"
 
 # BACKUP
-# All 'DIR' should end in '/'.
 SOURCE_DIR="/"
-RESTORE_TARGET_DIR="$SOURCE_DIR"
+RESTORE_DIR="$SOURCE_DIR"
 STORAGE_DIR="<STORAGE_DIR>"
 RSYNC_BACKUP_PREFIX="rsync_monthly"
-RSYNC_BACKUP_MAIN_PATH="$STORAGE_DIR""$RSYNC_BACKUP_PREFIX"
 RSYNC_BACKUP_OPTIONS=("-aAHX" "--delete" "--numeric-ids" "--exclude=/lost+found"
 "--exclude=/proc/*" "--exclude=/sys/*" "--exclude=/dev/*" "--exclude=/home/*"
 "--exclude=/tmp/*" "--exclude=/run/*" "--exclude=/mnt/*" "--exclude=/media/*")
 DATE_FORMAT="%Y-%b-%d-%H-%M-%S"
 TIMESTAMP="$(date +$DATE_FORMAT)"
-BACKUP_DIR="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"/
 
 # ARCHIVE & STORAGE
 BACKUP_SCRIPT="./rsync_backup.sh"
