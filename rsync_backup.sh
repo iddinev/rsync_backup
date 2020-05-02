@@ -92,8 +92,9 @@ function count_rsync_backup()
 
 function list_rsync_backup()
 {
+	# Newest 1st.
 	echo "Found the following backups:"
-	ls -dqtrF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
+	ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
 }
 
 function rotate_rsync_backup()
@@ -216,7 +217,6 @@ else
 fi
 
 source "$LIB_PATH"
-
 
 # Gives resolved absolute path, gets rid of trailing slashes.
 RSYNC_BACKUP_MAIN_PATH="$(realpath -sm $STORAGE_DIR)"/"$RSYNC_BACKUP_PREFIX"

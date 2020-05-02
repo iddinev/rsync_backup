@@ -23,7 +23,7 @@ function create_rsync_backup()
 function count_targz_backup()
 {
 	local ret_val=-1
-	local list_cmd="ls -1dq ${BACKUP_ARCHIVE_DIR}*${BACKUP_ARCHIVE_SUFFIX}"
+	local list_cmd="ls -1q ${BACKUP_ARCHIVE_DIR}/*${BACKUP_ARCHIVE_SUFFIX}"
 	local ret_val
 
 	ret_val="$(_count_backup "$list_cmd")"
@@ -35,7 +35,7 @@ function count_targz_backup()
 function count_gpg2_backup()
 {
 	local ret_val=-1
-	local list_cmd="ls -1dq ${BACKUP_GPG_ARCHIVE_DIR}*${BACKUP_GPG_SUFFIX}"
+	local list_cmd="ls -1q ${BACKUP_GPG_ARCHIVE_DIR}/*${BACKUP_GPG_SUFFIX}"
 	local ret_val
 
 	ret_val="$(_count_backup "$list_cmd")"
@@ -47,7 +47,7 @@ function count_gpg2_backup()
 function count_scp_backup()
 {
 	local ret_val=-1
-	local list_cmd="ssh ${SSH_USER}@${SSH_HOST} ls -1dq ${REMOTE_BACKUP_DIR}*"
+	local list_cmd="ssh ${SSH_USER}@${SSH_HOST} ls -1q ${REMOTE_BACKUP_DIR}/*${BACKUP_GPG_SUFFIX}"
 	local ret_val
 
 	ret_val="$(_count_backup "$list_cmd")"
@@ -61,12 +61,12 @@ function rotate_targz_backup()
 {
 	local ret_code=1
 	local num_targz="count_targz_backup"
-	local list_targz="ls -1dqt ${BACKUP_ARCHIVE_DIR}*${BACKUP_ARCHIVE_SUFFIX}"
+	# Newest 1st.
+	local list_targz="ls -qt ${BACKUP_ARCHIVE_DIR}/*${BACKUP_ARCHIVE_SUFFIX}"
 	local rm_targz="rm"
 
 	(_rotate_backup "$num_targz" "$list_targz" "$rm_targz")
 	ret_code="${?:-1}"
-
 
 	return "$ret_code"
 }
@@ -75,7 +75,8 @@ function rotate_gpg2_backup()
 {
 	local ret_code=1
 	local num_gpg2="count_gpg2_backup"
-	local list_gpg2="ls -1dqt ${BACKUP_GPG_ARCHIVE_DIR}*${BACKUP_GPG_SUFFIX}"
+	# Newest 1st.
+	local list_gpg2="ls -qt ${BACKUP_GPG_ARCHIVE_DIR}/*${BACKUP_GPG_SUFFIX}"
 	local rm_gpg2="rm"
 
     (_rotate_backup "$num_gpg2" "$list_gpg2" "$rm_gpg2")
@@ -89,7 +90,7 @@ function rotate_scp_backup()
 {
 	local ret_code=1
 	local num_scp="count_scp_backup"
-	local list_scp="ssh ${SSH_USER}@${SSH_HOST} ls -1dqt ${REMOTE_BACKUP_DIR}*"
+	local list_scp="ssh ${SSH_USER}@${SSH_HOST} ls -1qt ${REMOTE_BACKUP_DIR}/*${BACKUP_GPG_SUFFIX}"
 	local rm_scp="ssh ${SSH_USER}@${SSH_HOST} rm"
 
 	(_rotate_backup "$num_scp" "$list_scp" "$rm_scp" "$SSH_HOST")
@@ -119,7 +120,7 @@ function gpg2_encrypt()
 	local backup_list=()
 	local backup_file
 
-	mapfile -t backup_list < <(ls -dqt "$BACKUP_ARCHIVE_DIR"* 2>/dev/null)
+	mapfile -t backup_list < <(ls -dqt "$BACKUP_ARCHIVE_DIR"/*"$BACKUP_ARCHIVE_SUFFIX" 2>/dev/null)
 	if [ "${#backup_list[@]}" -ge 1 ] && [ -r "$GPG_PASS_FILE" ]; then
 		backup_file="${backup_list[0]}"
 		if gpg2 --compress-algo none --batch -c --cipher-algo AES256\
@@ -151,7 +152,7 @@ function targz_backup()
 		targz_file="${BACKUP_ARCHIVE_DIR}/${BACKUP_ARCHIVE_PREFIX}${timestamp}"
 		targz_file="${targz_file}${BACKUP_ARCHIVE_SUFFIX}"
 		if tar -zcf "$targz_file" "$latest_backup" 1>/dev/null 2>&1; then
-			log_systemd "Created $targz_file ."
+			log_systemd "Created $targz_file."
 			ret_code=0
 		fi
 	fi
@@ -165,7 +166,7 @@ function scp_backup()
 	local backup_list=()
 	local backup_file
 
-	mapfile -t backup_list < <(ls -dqt "$BACKUP_ARCHIVE_DIR"* 2>/dev/null)
+	mapfile -t backup_list < <(ls -qt "$BACKUP_ARCHIVE_DIR"/*"$BACKUP_GPG_SUFFIX" 2>/dev/null)
 	if [ "${#backup_list[@]}" -ge 1 ]; then
 		backup_file="${backup_list[0]}"
 		if scp -q "$backup_file"\
@@ -179,11 +180,8 @@ function scp_backup()
 }
 
 
-### MAIN
 
-BACKUP_ARCHIVE_DIR="$(realpath -sm $BACKUP_ARCHIVE_DIR)"
-BACKUP_GPG_ARCHIVE_DIR="$(realpath -sm $BACKUP_GPG_ARCHIVE_DIR)"
-REMOTE_BACKUP_DIR="$(realpath -sm $REMOTE_BACKUP_DIR)"
+### MAIN
 
 if [ "$TEST" ]; then
 	if ! [ -r "end2end.conf" ]; then
@@ -192,6 +190,7 @@ if [ "$TEST" ]; then
 		m_action=5
 	else
 		source "end2end.conf"
+	fi
 else
 	if ! [ -r "${CONF_PATH}" ]; then
 		echo "Missing $CONF_PATH"
@@ -204,9 +203,13 @@ fi
 
 source "$LIB_PATH"
 
+BACKUP_ARCHIVE_DIR="$(realpath -sm $BACKUP_ARCHIVE_DIR)"
+BACKUP_GPG_ARCHIVE_DIR="$(realpath -sm $BACKUP_GPG_ARCHIVE_DIR)"
+REMOTE_BACKUP_DIR="$(realpath -sm $REMOTE_BACKUP_DIR)"
+
 m_exit=1
 
-log_systemd "Starting Monthly backup."
+log_systemd "Starting $RSYNC_BACKUP_PREFIX backup."
 create_rsync_backup
 ret_code=$?
 if [ "$ret_code" -eq 0 ]; then
@@ -222,11 +225,19 @@ if [ "$m_exit" -eq 0 ]; then
 fi
 
 if [ "$m_exit" -eq 0 ]; then
-	if gpg2_encrypt && rotate_gpg2_backup &&\
-	scp_backup && rotate_scp_backup; then
-		m_exit=0
+	if [ "$TEST" ]; then
+		if gpg2_encrypt && rotate_gpg2_backup; then
+			m_exit=0
+		else
+			m_exit=1
+		fi
 	else
-		m_exit=1
+		if gpg2_encrypt && rotate_gpg2_backup &&\
+		scp_backup && rotate_scp_backup; then
+			m_exit=0
+		else
+			m_exit=1
+		fi
 	fi
 fi
 

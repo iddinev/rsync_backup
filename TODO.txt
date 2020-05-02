@@ -4,7 +4,7 @@ TESTING:
 	On storage dir.
 - Check what happens when backup rotation fails.
 * - Backup rotation.
-- Script doesnt care if dir's end in '/' or not.
+* - Script doesnt care if dir's end in '/' or not.
 * - Testable config (not easily).
-- Check listing order.
-- Check restoration choosing is correct.
+* - Check listing order.
+* - Check restoration choosing is correct.

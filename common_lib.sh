@@ -14,7 +14,8 @@ function _count_backup()
 	local num_backup
 
 	if [ "$list_cmd" != "None" ]; then
-		num_backup="$(true && $list_cmd 2>/dev/null | wc -l)"
+		# num_backup="$(true && $list_cmd 2>/dev/null | wc -l)"
+		num_backup="$($list_cmd 2>/dev/null | wc -l)"
 		if [ -n "$num_backup" ]; then
 			ret_val="$num_backup"
 		fi
@@ -25,7 +26,7 @@ function _count_backup()
 
 function _rotate_backup()
 {
-	# 'list_cmd' should give (mtime) sorted output.
+	# 'list_cmd' should give (mtime) sorted output - oldest last.
 	local ret_code=1
 	local count_cmd="${1:-None}"
 	local list_cmd="${2:-None}"
@@ -46,7 +47,7 @@ function _rotate_backup()
 				mapfile -t backup_list < <($list_cmd 2>/dev/null)
 				for i in $(eval "echo {$MAX_BACKUPS..$((num_backup-1))}"); do
 					if ($rm_cmd "${backup_list[i]}"); then
-						msg="Rotating away on $host, ${backup_list[i]} ."
+						msg="Rotating away on $host, ${backup_list[i]}."
 						log_systemd "$msg"
 					fi
 				done

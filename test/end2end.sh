@@ -94,6 +94,7 @@ function test_suite_setup()
 
 	source "$TEST_CONFIG_PATH"
 	BACKUP_SCRIPT="TEST=1 $BACKUP_SCRIPT"
+	BACKUP_ARCHIVE_SCRIPT="TEST=1 $BACKUP_ARCHIVE_SCRIPT"
 
 	_create_test_dirs
 	l_rc="$?"
@@ -137,7 +138,7 @@ function all_tests()
 
 	local l_rc=1
 
-	for tst in "test_rotation test_restore"; do
+	for tst in "test_rotation test_restore test_archive_rotation"; do
 		if ! $tst; then
 			TEST_RESULT="$(($TEST_RESULT+1))"
 		fi
@@ -175,15 +176,77 @@ function test_rotation()
 		l_rc=0
 	done
 
-	# Test a single rotation.
-	sleep 1
-	eval "$BACKUP_SCRIPT --backup"
-	l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-	${RSYNC_BACKUP_PREFIX}* | wc -l)"
+	if [ "$l_rc" -eq "0" ]; then
+		# Test a single rotation.
+		sleep 1
+		eval "$BACKUP_SCRIPT --backup"
+		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+		${RSYNC_BACKUP_PREFIX}* | wc -l)"
+		if [ "$l_num_backups" -ne "$(($MAX_BACKUPS))" ]; then
+			echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
+			l_rc=1
+		fi
+	fi
 
-	if [ "$l_num_backups" -ne "$(($MAX_BACKUPS))" ]; then
-		echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
-		l_rc=1
+	if [ "$l_rc" -eq "0" ] && test_teardown; then
+		l_rc=0
+	fi
+
+	return "$l_rc"
+}
+
+function test_archive_rotation()
+{
+	echo '@@'
+	echo "${FUNCNAME[0]}"
+
+	local l_num_backups=0
+	local l_num_archives=0
+	local l_num_gpgs=0
+	local l_rc=1
+
+	create_dummy_file "${FUNCNAME[0]}"
+
+	for ((i=0; i<=$MAX_BACKUPS; i++)); do
+		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+		${RSYNC_BACKUP_PREFIX}* | wc -l)"
+		l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
+		l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_GPG_SUFFIX} | wc -l)"
+		if [ "$l_num_backups" -ne "$i" ] || [ "$l_num_archives" -ne "$i" ] || \
+		[ "$l_num_gpgs" -ne "$i" ]; then
+			echo "Rotation failed at $i/$MAX_BACKUPS."
+			l_rc=1
+			break
+		fi
+		sleep 1
+		eval "$BACKUP_ARCHIVE_SCRIPT"
+		l_rc=0
+	done
+
+	# Test a single rotation.
+
+	if [ "$l_rc" -eq "0" ]; then
+		sleep 1
+		eval "$BACKUP_ARCHIVE_SCRIPT"
+		# find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		# *${BACKUP_GPG_SUFFIX}
+		# echo ''
+		# find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		# *${BACKUP_ARCHIVE_SUFFIX}
+		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+		${RSYNC_BACKUP_PREFIX}* | wc -l)"
+		l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
+		l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+		*${BACKUP_GPG_SUFFIX} | wc -l)"
+		if [ "$l_num_backups" -ne "$MAX_BACKUPS" ] || \
+		[ "$l_num_archives" -ne "$MAX_BACKUPS" ] || \
+		[ "$l_num_gpgs" -ne "$MAX_BACKUPS" ]; then
+			echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
+			l_rc=1
+		fi
 	fi
 
 	if [ "$l_rc" -eq "0" ] && test_teardown; then
@@ -210,8 +273,10 @@ test_restore()
 	for ((i=$MAX_BACKUPS; i>=1; --i)); do
 		eval "$BACKUP_SCRIPT --restore $i"
 		content="$(cat $l_tst_file)"
-		if [ "$content" -ne "$i" ]; then
+		# Last backup is oldest - has smalles number as file contnetn.
+		if [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
 			echo "Restoration failed at backup $i."
+			l_rc=1
 			break
 		else
 			l_rc=0
@@ -248,6 +313,16 @@ case "$1" in
 	;;
 	--rotate)
 		test_suite_setup && test_rotation
+		TEST_RESULT="$?"
+		test_suite_teardown
+		echo '##############'
+		echo "Test result: $TEST_RESULT failed."
+		if [ "$TEST_RESULT" -ne "0" ]; then
+			exit 1
+		fi
+	;;
+	--rotate-archive)
+		test_suite_setup && test_archive_rotation
 		TEST_RESULT="$?"
 		test_suite_teardown
 		echo '##############'
