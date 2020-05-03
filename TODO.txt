@@ -1,3 +1,8 @@
+FUNCTIONALITY:
+- Migrate to 1 single script
+- systemd service should fail if script fails.
+  Suspend should still happen.
+- Copy back from host / untar / decrypt.
 TESTING:
 - Check for space:
 *	On archive dir.
@@ -8,3 +13,8 @@ TESTING:
 * - Testable config (not easily).
 * - Check listing order.
 * - Check restoration choosing is correct.
+- Copy back from archive:
+	Check if there is space for a copy back.
+	Copy back.
+	Decrypt.
+	Untar.

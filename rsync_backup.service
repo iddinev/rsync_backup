@@ -3,8 +3,12 @@ Description=rsync backup to local storage service
 
 [Service]
 ProtectSystem=strict
-ReadWritePaths=/mnt/storage/pi_backup/rsync_backups
+ReadWritePaths=<SOME_PATH>
+ReadWritePaths=<SOME_PATH>
 Type=oneshot
 ExecStart=/usr/local/sbin/rsync_backup --backup
-
-
+ExecStart=/mnt/backup_code/rsync_backup.sh --archive
+# Use for cleanup/post exectuion as this is executed even if the
+# ExecStart commands fail. Example: hibernate the system.
+ExecStopPost=/usr/bin/sleep 60
+ExecStopPost=/usr/bin/systemctl hibernate

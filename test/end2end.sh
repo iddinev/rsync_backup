@@ -59,6 +59,7 @@ function _destroy_loop_dev()
 		losetup -D
 		rm -rf "$TEST_MAIN_DIR"
 	else
+		echo 'Invoked with DEBUG - skipping teardown actions.'
 		l_rc=0
 	fi
 
@@ -84,12 +85,16 @@ function test_suite_setup()
 	echo "${FUNCNAME[0]}"
 	local l_rc=1
 
-	source "$TEST_CONFIG_PATH"
-	BACKUP_SCRIPT="TEST=1 $BACKUP_SCRIPT"
-	BACKUP_ARCHIVE_SCRIPT="TEST=1 $BACKUP_ARCHIVE_SCRIPT"
+	if source "$TEST_CONFIG_PATH"; then
+		if [ "$DEBUG" ]; then
+			BACKUP_SCRIPT="TEST=1 ../rsync_backup.sh"
+		else
+			BACKUP_SCRIPT="TEST=1 ../rsync_backup.sh  2>/dev/null 1>&2"
+		fi
 
-	_create_test_dirs
-	l_rc="$?"
+		_create_test_dirs
+		l_rc="$?"
+	fi
 
 	return "$l_rc"
 }
@@ -205,7 +210,7 @@ function test_archive_rotation()
 	local l_num_gpgs=0
 	local l_rc=1
 
-	create_dummy_file "${FUNCNAME[0]}"
+	create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}"
 
 	for ((i=0; i<=$MAX_BACKUPS; i++)); do
 		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
@@ -221,7 +226,8 @@ function test_archive_rotation()
 			break
 		fi
 		sleep 1
-		eval "$BACKUP_ARCHIVE_SCRIPT"
+		eval "$BACKUP_SCRIPT --backup"
+		eval "$BACKUP_SCRIPT --archive"
 		l_rc=0
 	done
 
@@ -229,7 +235,8 @@ function test_archive_rotation()
 
 	if [ "$l_rc" -eq "0" ]; then
 		sleep 1
-		eval "$BACKUP_ARCHIVE_SCRIPT"
+		eval "$BACKUP_SCRIPT --backup"
+		eval "$BACKUP_SCRIPT --archive"
 		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
 		${RSYNC_BACKUP_PREFIX}* | wc -l)"
 		l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
@@ -355,11 +362,13 @@ test_no_space_archive()
 	# Sizes in the stuit setup and random file are such as that there is space for only
 	# 1 gpg archive.
 	if dd if=/dev/urandom of="$l_tst_file" bs=1M count=1 2>/dev/null; then
-		eval "$BACKUP_ARCHIVE_SCRIPT"
+		eval "$BACKUP_SCRIPT --backup"
+		eval "$BACKUP_SCRIPT --archive"
 		l_backup_pre="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
 		*${BACKUP_GPG_SUFFIX})"
 		sleep 1
-		eval "$BACKUP_ARCHIVE_SCRIPT"
+		eval "$BACKUP_SCRIPT --backup"
+		eval "$BACKUP_SCRIPT --archive"
 		l_num_backups="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
 		*${BACKUP_GPG_SUFFIX} | wc -l)"
 		l_backup_post="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
