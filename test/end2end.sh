@@ -23,18 +23,10 @@ function _create_loop_dev()
 	local l_size="${3:-5M}"
 	local l_loop="$(losetup -f)"
 
-	if ! [ "$DEBUG" ]; then
-		if ( dd if=/dev/zero of="$l_db" bs="$l_size" count=1 && \
-		losetup -fP "$l_db" && mkfs.ext4 "$l_db" && mkdir -p "$l_path" && \
-		mount "$l_loop" "$l_path" ) 1>/dev/null 2>&1; then
-			l_rc=0
-		fi
-	else
-		if dd if=/dev/zero of="$l_db" bs="$l_size" count=1 && \
-		losetup -fP "$l_db" && mkfs.ext4 "$l_db" && \
-		mkdir -p "$l_path" && mount "$l_loop" "$l_path"; then
-			l_rc=0
-		fi
+	if ( dd if=/dev/zero of="$l_db" bs="$l_size" count=1 && \
+	losetup -fP "$l_db" && mkfs.ext4 "$l_db" && mkdir -p "$l_path" && \
+	mount "$l_loop" "$l_path" ) 1>/dev/null 2>&1; then
+		l_rc=0
 	fi
 
 	return "$l_rc"
@@ -45,16 +37,6 @@ function _create_test_dirs()
 	local l_rc=1
 
 	for db in "${!TEST_MNT[@]}"; do
-		# Needed for the no space on archive test.
-		# if [[ "$db" =~ "archive" ]]; then
-			# if _create_loop_dev "$db" "${TEST_MNT[$db]}" 5M ; then
-				# l_rc=0
-			# fi
-		# else
-			# if _create_loop_dev "$db" "${TEST_MNT[$db]}" ; then
-				# l_rc=0
-			# fi
-		# fi
 		if _create_loop_dev "$db" "${TEST_MNT[$db]}" ; then
 			l_rc=0
 		fi
@@ -88,7 +70,7 @@ function test_teardown()
 	local l_rc=1
 
 	for db in "${!TEST_MNT[@]}"; do
-		if rm -rf "${TEST_MNT[$db]}/*"; then
+		if rm -rf "${TEST_MNT[$db]}"/*; then
 			l_rc=0
 		fi
 	done
@@ -148,8 +130,8 @@ function all_tests()
 
 	local l_rc=1
 
-	for tst in "test_rotation test_restore test_archive_rotation \
-	test_no_space_storage test_no_space_archive"; do
+	for tst in "test_rotation" "test_restore" "test_archive_rotation" \
+	"test_no_space_storage" "test_no_space_archive"; do
 		if ! $tst; then
 			TEST_RESULT="$(($TEST_RESULT+1))"
 		fi
@@ -172,7 +154,7 @@ function test_rotation()
 	local l_num_backups=0
 	local l_rc=1
 
-	create_dummy_file "${FUNCNAME[0]}"
+	create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}"
 
 	for ((i=0; i<=$MAX_BACKUPS; i++)); do
 		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
@@ -199,8 +181,15 @@ function test_rotation()
 		fi
 	fi
 
-	if [ "$l_rc" -eq "0" ] && test_teardown; then
-		l_rc=0
+	if test_teardown; then
+		if [ "$l_rc" -eq "0" ]; then
+			echo 'TEST: OK'
+			l_rc=0
+		else
+			echo 'TEST: NOK'
+		fi
+	else
+		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -241,11 +230,6 @@ function test_archive_rotation()
 	if [ "$l_rc" -eq "0" ]; then
 		sleep 1
 		eval "$BACKUP_ARCHIVE_SCRIPT"
-		# find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		# *${BACKUP_GPG_SUFFIX}
-		# echo ''
-		# find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		# *${BACKUP_ARCHIVE_SUFFIX}
 		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
 		${RSYNC_BACKUP_PREFIX}* | wc -l)"
 		l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
@@ -260,8 +244,15 @@ function test_archive_rotation()
 		fi
 	fi
 
-	if [ "$l_rc" -eq "0" ] && test_teardown; then
-		l_rc=0
+	if test_teardown; then
+		if [ "$l_rc" -eq "0" ]; then
+			echo 'TEST: OK'
+			l_rc=0
+		else
+			echo 'TEST: NOK'
+		fi
+	else
+		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -294,8 +285,15 @@ test_restore()
 		fi
 	done
 
-	if [ "$l_rc" -eq "0" ] && test_teardown; then
-		l_rc=0
+	if test_teardown; then
+		if [ "$l_rc" -eq "0" ]; then
+			echo 'TEST: OK'
+			l_rc=0
+		else
+			echo 'TEST: NOK'
+		fi
+	else
+		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -329,8 +327,15 @@ test_no_space_storage()
 		fi
 	fi
 
-	if [ "$l_rc" -eq "0" ] && test_teardown; then
-		l_rc=0
+	if test_teardown; then
+		if [ "$l_rc" -eq "0" ]; then
+			echo 'TEST: OK'
+			l_rc=0
+		else
+			echo 'TEST: NOK'
+		fi
+	else
+		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -365,8 +370,15 @@ test_no_space_archive()
 		fi
 	fi
 
-	if [ "$l_rc" -eq "0" ] && test_teardown; then
-		l_rc=0
+	if test_teardown; then
+		if [ "$l_rc" -eq "0" ]; then
+			echo 'TEST: OK'
+			l_rc=0
+		else
+			echo 'TEST: NOK'
+		fi
+	else
+		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
