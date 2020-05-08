@@ -14,7 +14,6 @@ function _count_backup()
 	local num_backup
 
 	if [ "$list_cmd" != "None" ]; then
-		# num_backup="$(true && $list_cmd 2>/dev/null | wc -l)"
 		num_backup="$($list_cmd 2>/dev/null | wc -l)"
 		if [ -n "$num_backup" ]; then
 			ret_val="$num_backup"

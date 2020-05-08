@@ -4,18 +4,24 @@
 
 TEST_MAIN_DIR="test_mnt"
 declare -A TEST_MNT
-TEST_MNT=(
+declare -A TEST_MNT_MAIN
+TEST_MNT_MAIN=(
 	[test_root.db]="$TEST_MAIN_DIR/root"
 	[test_storage.db]="$TEST_MAIN_DIR/storage"
 	[test_archive.db]="$TEST_MAIN_DIR/archive"
 )
-TEST_CONFIG_PATH="end2end.conf"
+for key in "${!TEST_MNT_MAIN[@]}"; do
+	TEST_MNT["$key"]="${TEST_MNT_MAIN[$key]}"
+done
+
+TEST_CONFIG_TEMPLATE="end2end.template.conf"
+TEST_CONFIG="end2end.conf"
 TEST_RESULT=0
 
 
 
 # TEST SETUP
-function _create_loop_dev()
+_create_loop_dev()
 {
 	local l_rc=1
 	local l_db="$1"
@@ -32,12 +38,12 @@ function _create_loop_dev()
 	return "$l_rc"
 }
 
-function _create_test_dirs()
+_create_test_dirs()
 {
 	local l_rc=1
 
-	for db in "${!TEST_MNT[@]}"; do
-		if _create_loop_dev "$db" "${TEST_MNT[$db]}" ; then
+	for db in "${!TEST_MNT_MAIN[@]}"; do
+		if _create_loop_dev "$db" "${TEST_MNT_MAIN[$db]}" ; then
 			l_rc=0
 		fi
 	done
@@ -45,53 +51,77 @@ function _create_test_dirs()
 	return "$l_rc"
 }
 
-function _destroy_loop_dev()
+_destroy_loop_dev()
 {
 	local l_rc=1
 
-	if ! [ "$DEBUG" ]; then
-		for db in "${!TEST_MNT[@]}"; do
-			if umount "${TEST_MNT[$db]}" && \
-			rm "$db"; then
-				l_rc=0
-			fi
-		done
-		losetup -D
-		rm -rf "$TEST_MAIN_DIR"
-	else
-		echo 'Invoked with DEBUG - skipping teardown actions.'
-		l_rc=0
+	for db in "${!TEST_MNT_MAIN[@]}"; do
+		if umount "${TEST_MNT_MAIN[$db]}" && \
+		rm "$db"; then
+			l_rc=0
+		fi
+	done
+	if [ "$l_rc" -eq "0" ]; then
+		if losetup -D && rm -rf "$TEST_MAIN_DIR"; then
+			l_rc=0
+		fi
 	fi
 
 	return "$l_rc"
 }
 
-function test_teardown()
+test_setup()
 {
 	local l_rc=1
+	local l_test_tag="$1"
 
+	cp "$TEST_CONFIG_TEMPLATE" "$TEST_CONFIG"
 	for db in "${!TEST_MNT[@]}"; do
-		if rm -rf "${TEST_MNT[$db]}"/*; then
+		TEST_MNT["$db"]="${TEST_MNT_MAIN[$db]}"
+		TEST_MNT[$db]="${TEST_MNT[$db]}"/"$l_test_tag"
+		if mkdir "${TEST_MNT[$db]}"; then
 			l_rc=0
 		fi
 	done
 
+	if [ "$l_rc" -eq "0" ]; then
+		sed -i "s@SOURCE_DIR=\"\"@SOURCE_DIR=\"${TEST_MNT[test_root.db]}\"@" "$TEST_CONFIG"
+		sed -i "s@STORAGE_DIR=\"\"@STORAGE_DIR=\"${TEST_MNT[test_storage.db]}\"@" "$TEST_CONFIG"
+		sed -i "s@BACKUP_ARCHIVE_DIR=\"\"@BACKUP_ARCHIVE_DIR=\"${TEST_MNT[test_archive.db]}\"@" "$TEST_CONFIG"
+	fi
+
 	return "$l_rc"
 }
 
-function test_suite_setup()
+test_teardown()
+{
+	local l_rc=1
+
+	if [ "$DEBUG" ]; then
+		if mv "$TEST_CONFIG" "${TEST_MNT[test_root.db]}"; then
+			l_rc=0
+		fi
+	else
+		if rm "$TEST_CONFIG"; then
+			l_rc=0
+		fi
+	fi
+
+	return "$l_rc"
+}
+
+test_suite_setup()
 {
 	echo '~~~~~~~~~~~~~~'
 	echo "${FUNCNAME[0]}"
 	local l_rc=1
 
-	if source "$TEST_CONFIG_PATH"; then
+	if source "$TEST_CONFIG_TEMPLATE"; then
 		if [ "$DEBUG" ]; then
-			BACKUP_SCRIPT="TEST=1 ../rsync_backup.sh"
+			BACKUP_SCRIPT="TEST=$TEST_CONFIG ../rsync_backup.sh"
 		else
-			BACKUP_SCRIPT="TEST=1 ../rsync_backup.sh  2>/dev/null 1>&2"
+			BACKUP_SCRIPT="TEST=$TEST_CONFIG ../rsync_backup.sh  2>/dev/null 1>&2"
 		fi
-
 		_create_test_dirs
 		l_rc="$?"
 	fi
@@ -99,21 +129,26 @@ function test_suite_setup()
 	return "$l_rc"
 }
 
-function test_suite_teardown()
+test_suite_teardown()
 {
 	echo '~~~~~~~~~~~~~~'
 	echo "${FUNCNAME[0]}"
 	local l_rc=1
 
-	_destroy_loop_dev
-	l_rc="$?"
+	if [ "$DEBUG" ]; then
+		echo 'DEBUG: skipping teardown actions.'
+		l_rc=0
+	else
+		_destroy_loop_dev
+		l_rc=0
+	fi
 
 	return "$l_rc"
 }
 
 # TEST COMMON
 
-function create_dummy_file()
+create_dummy_file()
 {
 	local l_rc=1
 	local l_content="${1:-test_foo_bar}"
@@ -128,7 +163,7 @@ function create_dummy_file()
 
 # TEST SCENARIOS
 
-function all_tests()
+all_tests()
 {
 	echo '@@@@'
 	echo "${FUNCNAME[0]}"
@@ -149,58 +184,59 @@ function all_tests()
 	return "$l_rc"
 }
 
-function test_rotation()
+test_rotation()
 {
-	# Main script always rotates by reusing the oldest backup as a base.
-	# Still this is tested explicitly.
+	# Script rotates by reusing the oldest backup as a base.
 	echo '@@'
 	echo "${FUNCNAME[0]}"
 
 	local l_num_backups=0
 	local l_rc=1
+	local l_test_tag="${FUNCNAME[0]}"
 
-	create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}"
+	if test_setup "$l_test_tag"; then
+		create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
 
-	for ((i=0; i<=$MAX_BACKUPS; i++)); do
-		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}* | wc -l)"
-		if [ "$l_num_backups" -ne "$i" ]; then
-			echo "Rotation failed at $i/$MAX_BACKUPS."
-			l_rc=1
-			break
-		fi
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-		l_rc=0
-	done
-
-	if [ "$l_rc" -eq "0" ]; then
-		# Test a single rotation.
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}* | wc -l)"
-		if [ "$l_num_backups" -ne "$(($MAX_BACKUPS))" ]; then
-			echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
-			l_rc=1
-		fi
-	fi
-
-	if test_teardown; then
-		if [ "$l_rc" -eq "0" ]; then
-			echo 'TEST: OK'
+		for ((i=0; i<=$MAX_BACKUPS; i++)); do
+			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}* | wc -l)"
+			if [ "$l_num_backups" -ne "$i" ]; then
+				echo "Rotation failed at $i/$MAX_BACKUPS."
+				l_rc=1
+				break
+			fi
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
 			l_rc=0
-		else
-			echo 'TEST: NOK'
+		done
+
+		if [ "$l_rc" -eq "0" ]; then
+			# Test a single rotation.
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
+			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}* | wc -l)"
+			if [ "$l_num_backups" -ne "$(($MAX_BACKUPS))" ]; then
+				echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
+				l_rc=1
+			fi
 		fi
-	else
-		echo 'TEST: NOK - teardown failed.'
+
+		if test_teardown; then
+			if [ "$l_rc" -eq "0" ]; then
+				echo 'TEST: OK'
+			else
+				echo 'TEST: NOK'
+			fi
+		else
+			echo 'TEST: NOK - teardown failed.'
+		fi
 	fi
 
 	return "$l_rc"
 }
 
-function test_archive_rotation()
+test_archive_rotation()
 {
 	echo '@@'
 	echo "${FUNCNAME[0]}"
@@ -209,57 +245,61 @@ function test_archive_rotation()
 	local l_num_archives=0
 	local l_num_gpgs=0
 	local l_rc=1
+	local l_test_tag="${FUNCNAME[0]}"
 
-	create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}"
+	if test_setup "$l_test_tag"; then
 
-	for ((i=0; i<=$MAX_BACKUPS; i++)); do
-		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}* | wc -l)"
-		l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
-		l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_GPG_SUFFIX} | wc -l)"
-		if [ "$l_num_backups" -ne "$i" ] || [ "$l_num_archives" -ne "$i" ] || \
-		[ "$l_num_gpgs" -ne "$i" ]; then
-			echo "Rotation failed at $i/$MAX_BACKUPS."
-			l_rc=1
-			break
-		fi
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-		eval "$BACKUP_SCRIPT --archive"
-		l_rc=0
-	done
+		create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
 
-	# Test a single rotation.
-
-	if [ "$l_rc" -eq "0" ]; then
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-		eval "$BACKUP_SCRIPT --archive"
-		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}* | wc -l)"
-		l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
-		l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_GPG_SUFFIX} | wc -l)"
-		if [ "$l_num_backups" -ne "$MAX_BACKUPS" ] || \
-		[ "$l_num_archives" -ne "$MAX_BACKUPS" ] || \
-		[ "$l_num_gpgs" -ne "$MAX_BACKUPS" ]; then
-			echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
-			l_rc=1
-		fi
-	fi
-
-	if test_teardown; then
-		if [ "$l_rc" -eq "0" ]; then
-			echo 'TEST: OK'
+		for ((i=0; i<=$MAX_BACKUPS; i++)); do
+			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}* | wc -l)"
+			l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
+			l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_GPG_SUFFIX} | wc -l)"
+			if [ "$l_num_backups" -ne "$i" ] || [ "$l_num_archives" -ne "$i" ] || \
+			[ "$l_num_gpgs" -ne "$i" ]; then
+				echo "Rotation failed at $i/$MAX_BACKUPS."
+				l_rc=1
+				break
+			fi
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
+			eval "$BACKUP_SCRIPT --archive"
 			l_rc=0
-		else
-			echo 'TEST: NOK'
+		done
+
+		# Test a single rotation.
+
+		if [ "$l_rc" -eq "0" ]; then
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
+			eval "$BACKUP_SCRIPT --archive"
+			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}* | wc -l)"
+			l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
+			l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_GPG_SUFFIX} | wc -l)"
+			if [ "$l_num_backups" -ne "$MAX_BACKUPS" ] || \
+			[ "$l_num_archives" -ne "$MAX_BACKUPS" ] || \
+			[ "$l_num_gpgs" -ne "$MAX_BACKUPS" ]; then
+				echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
+				l_rc=1
+			fi
 		fi
-	else
-		echo 'TEST: NOK - teardown failed.'
+
+		if test_teardown; then
+			if [ "$l_rc" -eq "0" ]; then
+				echo 'TEST: OK'
+				l_rc=0
+			else
+				echo 'TEST: NOK'
+			fi
+		else
+			echo 'TEST: NOK - teardown failed.'
+		fi
 	fi
 
 	return "$l_rc"
@@ -271,36 +311,40 @@ test_restore()
 	echo "${FUNCNAME[0]}"
 
 	local l_rc=1
-	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+	local l_tst_file=""
+	local l_test_tag="${FUNCNAME[0]}"
 
-	for ((i=1; i<=$MAX_BACKUPS; i++)); do
-		create_dummy_file "$i" "$l_tst_file"
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-	done
+	if test_setup "$l_test_tag"; then
+		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+		for ((i=1; i<=$MAX_BACKUPS; i++)); do
+			create_dummy_file "$i" "$l_tst_file"
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
+		done
 
-	for ((i=$MAX_BACKUPS; i>=1; --i)); do
-		eval "$BACKUP_SCRIPT --restore $i"
-		content="$(cat $l_tst_file)"
-		# Last backup is oldest - has smalles number as file contnetn.
-		if [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
-			echo "Restoration failed at backup $i."
-			l_rc=1
-			break
+		for ((i=$MAX_BACKUPS; i>=1; --i)); do
+			eval "$BACKUP_SCRIPT --restore $i"
+			content="$(cat $l_tst_file)"
+			# Last backup is oldest - has smalles number as file contnetn.
+			if [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
+				echo "Restoration failed at backup $i."
+				l_rc=1
+				break
+			else
+				l_rc=0
+			fi
+		done
+
+		if test_teardown; then
+			if [ "$l_rc" -eq "0" ]; then
+				echo 'TEST: OK'
+				l_rc=0
+			else
+				echo 'TEST: NOK'
+			fi
 		else
-			l_rc=0
+			echo 'TEST: NOK - teardown failed.'
 		fi
-	done
-
-	if test_teardown; then
-		if [ "$l_rc" -eq "0" ]; then
-			echo 'TEST: OK'
-			l_rc=0
-		else
-			echo 'TEST: NOK'
-		fi
-	else
-		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -312,37 +356,40 @@ test_no_space_storage()
 	echo "${FUNCNAME[0]}"
 
 	local l_rc=1
-	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+	local l_tst_file=""
 	local l_num_backups=0
 	local l_backup_pre=""
 	local l_backup_post=""
+	local l_test_tag="${FUNCNAME[0]}"
 
-
-	if dd if=/dev/zero of="$l_tst_file" bs=3M count=1 2>/dev/null; then
-		eval "$BACKUP_SCRIPT --backup"
-		l_backup_pre="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}*)"
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-		l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}* | wc -l)"
-		l_backup_post="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-		${RSYNC_BACKUP_PREFIX}*)"
-		if [ "$l_num_backups" -eq "1" ] && \
-		[ "$l_backup_pre" == "$l_backup_post" ]; then
-			l_rc=0
+	if test_setup "$l_test_tag"; then
+		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+		if dd if=/dev/zero of="$l_tst_file" bs=3M count=1 2>/dev/null; then
+			eval "$BACKUP_SCRIPT --backup"
+			l_backup_pre="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}*)"
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
+			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}* | wc -l)"
+			l_backup_post="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
+			${RSYNC_BACKUP_PREFIX}*)"
+			if [ "$l_num_backups" -eq "1" ] && \
+			[ "$l_backup_pre" == "$l_backup_post" ]; then
+				l_rc=0
+			fi
 		fi
-	fi
 
-	if test_teardown; then
-		if [ "$l_rc" -eq "0" ]; then
-			echo 'TEST: OK'
-			l_rc=0
+		if test_teardown; then
+			if [ "$l_rc" -eq "0" ]; then
+				echo 'TEST: OK'
+				l_rc=0
+			else
+				echo 'TEST: NOK'
+			fi
 		else
-			echo 'TEST: NOK'
+			echo 'TEST: NOK - teardown failed.'
 		fi
-	else
-		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -354,40 +401,44 @@ test_no_space_archive()
 	echo "${FUNCNAME[0]}"
 
 	local l_rc=1
-	local l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+	local l_tst_file=""
 	local l_num_backups=0
 	local l_backup_pre=""
 	local l_backup_post=""
+	local l_test_tag="${FUNCNAME[0]}"
 
-	# Sizes in the stuit setup and random file are such as that there is space for only
-	# 1 gpg archive.
-	if dd if=/dev/urandom of="$l_tst_file" bs=1M count=1 2>/dev/null; then
-		eval "$BACKUP_SCRIPT --backup"
-		eval "$BACKUP_SCRIPT --archive"
-		l_backup_pre="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_GPG_SUFFIX})"
-		sleep 1
-		eval "$BACKUP_SCRIPT --backup"
-		eval "$BACKUP_SCRIPT --archive"
-		l_num_backups="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_GPG_SUFFIX} | wc -l)"
-		l_backup_post="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-		*${BACKUP_GPG_SUFFIX})"
-		if [ "$l_num_backups" -eq "1" ] && \
-		[ "$l_backup_pre" == "$l_backup_post" ]; then
-			l_rc=0
+	if test_setup "$l_test_tag"; then
+		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
+		# Sizes in the stuit setup and random file are such as that there is space for only
+		# 1 gpg archive.
+		if dd if=/dev/urandom of="$l_tst_file" bs=1M count=1 2>/dev/null; then
+			eval "$BACKUP_SCRIPT --backup"
+			eval "$BACKUP_SCRIPT --archive"
+			l_backup_pre="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_GPG_SUFFIX})"
+			sleep 1
+			eval "$BACKUP_SCRIPT --backup"
+			eval "$BACKUP_SCRIPT --archive"
+			l_num_backups="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_GPG_SUFFIX} | wc -l)"
+			l_backup_post="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
+			*${BACKUP_GPG_SUFFIX})"
+			if [ "$l_num_backups" -eq "1" ] && \
+			[ "$l_backup_pre" == "$l_backup_post" ]; then
+				l_rc=0
+			fi
 		fi
-	fi
 
-	if test_teardown; then
-		if [ "$l_rc" -eq "0" ]; then
-			echo 'TEST: OK'
-			l_rc=0
+		if test_teardown; then
+			if [ "$l_rc" -eq "0" ]; then
+				echo 'TEST: OK'
+				l_rc=0
+			else
+				echo 'TEST: NOK'
+			fi
 		else
-			echo 'TEST: NOK'
+			echo 'TEST: NOK - teardown failed.'
 		fi
-	else
-		echo 'TEST: NOK - teardown failed.'
 	fi
 
 	return "$l_rc"
@@ -404,7 +455,7 @@ fi
 
 case "$1" in
 	-c|--clean)
-		DEBUG="" test_suite_teardown
+		DEBUG='' test_suite_teardown
 	;;
 	-a|--all)
 		test_suite_setup && all_tests; test_suite_teardown

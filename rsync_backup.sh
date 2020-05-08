@@ -21,7 +21,9 @@ function create_rsync_backup()
 
 	if [ "$cmd_code" -eq 0 ]; then
 		if [ "$num_backup" -ge 0 ] && [ "$num_backup" -lt "$MAX_BACKUPS" ]; then
-			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR" \
+			# '/' Is needed, otherwise rsync will copy the dir itself, not contents.
+			# Trailing '/' are irrelevant for the target dirs.
+			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR"/ \
 			"$BACKUP_DIR"; then
 				ret_code=0
 				# Touch the new backup to update it's modify time.
@@ -98,7 +100,7 @@ function get_newest_rsync_backup()
 function count_rsync_backup()
 {
 	local ret_val=-1
-	local list_cmd="ls -1dq ${RSYNC_BACKUP_MAIN_PATH}*"
+	local list_cmd="list_rsync_backup"
 	local ret_val
 	ret_val="$(_count_backup "$list_cmd")"
 
@@ -395,12 +397,12 @@ case $m_opt in
 esac
 
 if [ "$TEST" ]; then
-	if ! [ -r "end2end.conf" ]; then
-		echo "Missing end2end.conf"
+	if ! [ -r "$TEST" ]; then
+		echo "Missing $TEST conf."
 		echo 
 		m_action=6
 	else
-		source "end2end.conf"
+		source "$TEST"
 	fi
 else
 	if ! [ -r "${CONF_PATH}" ]; then
@@ -415,6 +417,9 @@ fi
 source "$LIB_PATH"
 
 # Gives resolved absolute path, gets rid of trailing slashes.
+SOURCE_DIR="$(realpath -sm $SOURCE_DIR)"
+RESTORE_DIR="$(realpath -sm $RESTORE_DIR)"
+STORAGE_DIR="$(realpath -sm $STORAGE_DIR)"
 RSYNC_BACKUP_MAIN_PATH="$(realpath -sm $STORAGE_DIR)"/"$RSYNC_BACKUP_PREFIX"
 BACKUP_DIR="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
 BACKUP_ARCHIVE_DIR="$(realpath -sm $BACKUP_ARCHIVE_DIR)"
