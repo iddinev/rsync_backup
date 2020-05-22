@@ -2,7 +2,7 @@
 
 
 
-TEST_MAIN_DIR="test_mnt"
+TEST_MAIN_DIR="test_main"
 declare -A TEST_MNT
 declare -A TEST_MNT_MAIN
 TEST_MNT_MAIN=(
@@ -41,9 +41,11 @@ _create_loop_dev()
 _create_test_dirs()
 {
 	local l_rc=1
+	local l_test_tag="$1"
+	local l_size="${2:-5M}"
 
-	for db in "${!TEST_MNT_MAIN[@]}"; do
-		if _create_loop_dev "$db" "${TEST_MNT_MAIN[$db]}" ; then
+	for db in "${!TEST_MNT[@]}"; do
+		if _create_loop_dev "${TEST_MAIN_DIR}/${l_test_tag}_${db}" "${TEST_MNT[$db]}" "$l_size" ; then
 			l_rc=0
 		fi
 	done
@@ -54,18 +56,15 @@ _create_test_dirs()
 _destroy_loop_dev()
 {
 	local l_rc=1
+	local l_test_tag="$1"
 
-	for db in "${!TEST_MNT_MAIN[@]}"; do
-		if umount "${TEST_MNT_MAIN[$db]}" && \
-		rm "$db"; then
+	for db in "${!TEST_MNT[@]}"; do
+		if umount "${TEST_MNT[$db]}" && \
+		rm -r "${TEST_MNT[$db]}" && \
+		rm "${TEST_MAIN_DIR}/${l_test_tag}_${db}"; then
 			l_rc=0
 		fi
 	done
-	if [ "$l_rc" -eq "0" ]; then
-		if losetup -D && rm -rf "$TEST_MAIN_DIR"; then
-			l_rc=0
-		fi
-	fi
 
 	return "$l_rc"
 }
@@ -74,15 +73,21 @@ test_setup()
 {
 	local l_rc=1
 	local l_test_tag="$1"
+	local l_size="${2:-5M}"
 
 	cp "$TEST_CONFIG_TEMPLATE" "$TEST_CONFIG"
 	for db in "${!TEST_MNT[@]}"; do
-		TEST_MNT["$db"]="${TEST_MNT_MAIN[$db]}"
-		TEST_MNT[$db]="${TEST_MNT[$db]}"/"$l_test_tag"
-		if mkdir "${TEST_MNT[$db]}"; then
+		TEST_MNT["$db"]="${TEST_MNT_MAIN[$db]}"/"$l_test_tag"
+		if mkdir -p "${TEST_MNT[$db]}"; then
 			l_rc=0
 		fi
 	done
+
+	if [ "$l_rc" -eq "0" ]; then
+		if ! _create_test_dirs "$l_test_tag" "$l_size"; then
+			l_rc=1
+		fi
+	fi
 
 	if [ "$l_rc" -eq "0" ]; then
 		sed -i "s@SOURCE_DIR=\"\"@SOURCE_DIR=\"${TEST_MNT[test_root.db]}\"@" "$TEST_CONFIG"
@@ -96,13 +101,15 @@ test_setup()
 test_teardown()
 {
 	local l_rc=1
+	local l_test_tag="$1"
 
 	if [ "$DEBUG" ]; then
+		echo 'DEBUG: skipping teardown actions.'
 		if mv "$TEST_CONFIG" "${TEST_MNT[test_root.db]}"; then
 			l_rc=0
 		fi
 	else
-		if rm "$TEST_CONFIG"; then
+		if rm "$TEST_CONFIG" && _destroy_loop_dev "$l_test_tag"; then
 			l_rc=0
 		fi
 	fi
@@ -122,7 +129,11 @@ test_suite_setup()
 		else
 			BACKUP_SCRIPT="TEST=$TEST_CONFIG ../rsync_backup.sh  2>/dev/null 1>&2"
 		fi
-		_create_test_dirs
+		for db in "${!TEST_MNT_MAIN[@]}"; do
+			if mkdir -p "${TEST_MNT_MAIN[$db]}"; then
+				l_rc=0
+			fi
+		done
 		l_rc="$?"
 	fi
 
@@ -139,8 +150,13 @@ test_suite_teardown()
 		echo 'DEBUG: skipping teardown actions.'
 		l_rc=0
 	else
-		_destroy_loop_dev
-		l_rc=0
+		for mnt in $(find $TEST_MAIN_DIR \
+		-depth ! -type l -exec mountpoint -q {} \; -print); do
+			umount "$mnt"
+		done
+		if losetup --detach-all && rm -r "$TEST_MAIN_DIR"; then
+			l_rc=0
+		fi
 	fi
 
 	return "$l_rc"
@@ -222,7 +238,7 @@ test_rotation()
 			fi
 		fi
 
-		if test_teardown; then
+		if test_teardown "$l_test_tag"; then
 			if [ "$l_rc" -eq "0" ]; then
 				echo 'TEST: OK'
 			else
@@ -290,7 +306,7 @@ test_archive_rotation()
 			fi
 		fi
 
-		if test_teardown; then
+		if test_teardown "$l_test_tag"; then
 			if [ "$l_rc" -eq "0" ]; then
 				echo 'TEST: OK'
 				l_rc=0
@@ -313,6 +329,7 @@ test_restore()
 	local l_rc=1
 	local l_tst_file=""
 	local l_test_tag="${FUNCNAME[0]}"
+	local l_cmd_rc=1
 
 	if test_setup "$l_test_tag"; then
 		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
@@ -325,8 +342,12 @@ test_restore()
 		for ((i=$MAX_BACKUPS; i>=1; --i)); do
 			eval "$BACKUP_SCRIPT --restore $i"
 			content="$(cat $l_tst_file)"
+			l_cmd_rc="$?"
+			if [ "$l_cmd_rc" -ne "0" ]; then
+				l_rc=1
+				break
 			# Last backup is oldest - has smalles number as file contnetn.
-			if [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
+			elif [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
 				echo "Restoration failed at backup $i."
 				l_rc=1
 				break
@@ -335,7 +356,7 @@ test_restore()
 			fi
 		done
 
-		if test_teardown; then
+		if test_teardown "$l_test_tag"; then
 			if [ "$l_rc" -eq "0" ]; then
 				echo 'TEST: OK'
 				l_rc=0
@@ -380,7 +401,7 @@ test_no_space_storage()
 			fi
 		fi
 
-		if test_teardown; then
+		if test_teardown "$l_test_tag"; then
 			if [ "$l_rc" -eq "0" ]; then
 				echo 'TEST: OK'
 				l_rc=0
@@ -409,8 +430,6 @@ test_no_space_archive()
 
 	if test_setup "$l_test_tag"; then
 		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
-		# Sizes in the stuit setup and random file are such as that there is space for only
-		# 1 gpg archive.
 		if dd if=/dev/urandom of="$l_tst_file" bs=1M count=1 2>/dev/null; then
 			eval "$BACKUP_SCRIPT --backup"
 			eval "$BACKUP_SCRIPT --archive"
@@ -429,7 +448,7 @@ test_no_space_archive()
 			fi
 		fi
 
-		if test_teardown; then
+		if test_teardown "$l_test_tag"; then
 			if [ "$l_rc" -eq "0" ]; then
 				echo 'TEST: OK'
 				l_rc=0
