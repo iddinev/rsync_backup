@@ -35,7 +35,7 @@ function create_rsync_backup()
 			fi
 		elif [ "$num_backup" -ge "$MAX_BACKUPS" ]; then
 			base_backup="$(get_oldest_rsync_backup)"
-			log_systemd "MAX_BACKUPS ($MAX_BACKUPS) reached, using $base_backup as base (rotating it)."
+			log "MAX_BACKUPS ($MAX_BACKUPS) reached, using $base_backup as base (rotating it)."
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "$SOURCE_DIR" \
 			"$base_backup"; then
 				if mv "$base_backup" "$BACKUP_DIR"; then
@@ -53,9 +53,9 @@ function create_rsync_backup()
 
 	if [ "$ret_code" -eq 0 ] && [ -d "$BACKUP_DIR" ]; then
 		echo "$TIMESTAMP" > "$BACKUP_DIR"/"$TIMESTAMP_FILE"
-		log_systemd "Created new backup: $BACKUP_DIR."
+		log "Created new backup: $BACKUP_DIR."
 	else
-		log_systemd "Created new backup: $BACKUP_DIR - FAILED."
+		log "Created new backup: $BACKUP_DIR - FAILED."
 	fi
 
 	return "$ret_code"
@@ -221,27 +221,26 @@ function restore_rsync_backup()
 	cmd_code="$?"
 
 
-	log_systemd "Starting system restore."
+	log "Starting system restore."
 	if [ "$cmd_code" -eq 0 ]; then
 		mapfile -t backup_list < \
 		<(list_rsync_backup | cut -f 2)
 		if [ "$num_backup" -gt 0 ] && [ "$which_backup" -gt 0 ] && \
 			[ "$which_backup" -le "$num_backup" ]; then
 			backup="${backup_list[$(($which_backup-1))]}"
-			echo "Restoring $backup to $RESTORE_DIR."
-			log_systemd "Restoring $backup to $RESTORE_DIR."
+			log "Restoring $backup to $RESTORE_DIR."
 			# A moment of silence before your system breaks down completely.
 			sleep 5
 			if rsync "${RSYNC_BACKUP_OPTIONS[@]}" "-v" "$backup" \
 			"$RESTORE_DIR"; then
 				ret_code=0
-				log_systemd "Restored $backup to $RESTORE_DIR."
+				log "Restored $backup to $RESTORE_DIR."
 			else
-				log_systemd "Restoring $backup to $RESTORE_DIR - FAILED."
+				log "Restoring $backup to $RESTORE_DIR - FAILED."
 			fi
 		else
-			log_systemd "Available backups: ${backup_list[@]}."
-			log_systemd "Invalid backup selection $which_backup."
+			log "Available backups: ${backup_list[@]}."
+			log "Invalid backup selection $which_backup."
 		fi
 	fi
 
@@ -260,14 +259,14 @@ function gpg2_encrypt()
 		if gpg2 --compress-algo none --batch -c --cipher-algo AES256 \
 		--passphrase-file "$GPG_PASS_FILE" -o \
 		"${backup_file}${BACKUP_GPG_SUFFIX}" "$backup_file" ; then
-			log_systemd "gpg2 ${backup_file}${BACKUP_GPG_SUFFIX} successfull."
+			log "gpg2 ${backup_file}${BACKUP_GPG_SUFFIX} successfull."
 			ret_code=0
 		else
 			rm "${backup_file}${BACKUP_GPG_SUFFIX}"
-			log_systemd "gpg2 ${backup_file}${BACKUP_GPG_SUFFIX} failed."
+			log "gpg2 ${backup_file}${BACKUP_GPG_SUFFIX} failed."
 		fi
 	else
-		log_systemd "Check if the gpg_pass file is readable."
+		log "Check if the gpg_pass file \"$GPG_PASS_FILE\" is readable."
 	fi
 
 	return "$ret_code"
@@ -288,7 +287,7 @@ function targz_archive()
 		targz_file="${BACKUP_ARCHIVE_DIR}/${BACKUP_ARCHIVE_PREFIX}${timestamp}"
 		targz_file="${targz_file}${BACKUP_ARCHIVE_SUFFIX}"
 		if tar -zcf "$targz_file" "$latest_backup" 1>/dev/null 2>&1; then
-			log_systemd "Created $targz_file."
+			log "Created $targz_file."
 			ret_code=0
 		fi
 	fi
@@ -307,7 +306,7 @@ function scp_archive()
 		backup_file="${backup_list[0]}"
 		if scp -q "$backup_file"\
 		"$SSH_USER"@"$SSH_HOST":"$REMOTE_BACKUP_DIR"; then
-			log_systemd "scp to $SSH_HOST, $backup_file successfull."
+			log "scp to $SSH_HOST, $backup_file successfull."
 			ret_code=0
 		fi
 	fi
@@ -319,7 +318,7 @@ function archive()
 {
 	local ret_code=1
 
-	log_systemd "Archiving $RSYNC_BACKUP_PREFIX backup."
+	log "Archiving $RSYNC_BACKUP_PREFIX backup."
 
 	if targz_archive && rotate_targz_backup; then
 		ret_code=0
@@ -399,7 +398,7 @@ esac
 if [ "$TEST" ]; then
 	if ! [ -r "$TEST" ]; then
 		echo "Missing $TEST conf."
-		echo 
+		echo
 		m_action=6
 	else
 		source "$TEST"
@@ -407,7 +406,7 @@ if [ "$TEST" ]; then
 else
 	if ! [ -r "${CONF_PATH}" ]; then
 		echo "Missing $CONF_PATH"
-		echo 
+		echo
 		m_action=6
 	else
 		source "$CONF_PATH"
@@ -425,6 +424,7 @@ BACKUP_DIR="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
 BACKUP_ARCHIVE_DIR="$(realpath -sm $BACKUP_ARCHIVE_DIR)"
 BACKUP_GPG_ARCHIVE_DIR="$(realpath -sm $BACKUP_GPG_ARCHIVE_DIR)"
 REMOTE_BACKUP_DIR="$(realpath -sm $REMOTE_BACKUP_DIR)"
+GPG_PASS_FILE="$(realpath -sm $GPG_PASS_FILE)"
 
 case $m_action in
 	1)

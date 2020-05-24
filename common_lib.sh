@@ -1,10 +1,11 @@
 # Common functions for the backup and archive scripts.
 
-function log_systemd()
+function log()
 {
 	local prio="${2:-info}"
 
-	echo "$1" | systemd-cat -p "$prio" -t "$SCRIPTNAME"
+	echo "$1"
+
 }
 
 function _count_backup()

@@ -6,8 +6,8 @@ ProtectSystem=strict
 ReadWritePaths=<SOME_PATH>
 ReadWritePaths=<SOME_PATH>
 Type=oneshot
-ExecStart=/usr/local/sbin/rsync_backup --backup
-ExecStart=/mnt/backup_code/rsync_backup.sh --archive
+ExecStart=/usr/bin/systemd-cat -p info -t BACKUP /usr/local/sbin/rsync_backup.sh --backup
+ExecStart=/usr/bin/systemd-cat -p info -t BACKUP /usr/local/sbin/rsync_backup.sh --archive
 # Use for cleanup/post exectuion as this is executed even if the
 # ExecStart commands fail. Example: hibernate the system.
 ExecStopPost=/usr/bin/sleep 60
