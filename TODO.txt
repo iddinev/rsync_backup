@@ -1,7 +1,7 @@
 FUNCTIONALITY:
-- Migrate to 1 single script
-- systemd service should fail if script fails.
-  Suspend should still happen.
+*- Migrate to 1 single script
+*- systemd service should fail if script fails.
+*  Suspend should still happen.
 - Copy back from host / untar / decrypt.
 TESTING:
 - Check for space:
