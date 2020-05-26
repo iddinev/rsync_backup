@@ -2,6 +2,7 @@
 
 
 
+# shellcheck disable=SC2034
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_PATH="$(dirname "$(readlink -f "$0")")"
 CONF_PATH="${SCRIPT_PATH}/backup.conf"
@@ -148,6 +149,7 @@ function count_scp_backup()
 function list_rsync_backup()
 {
 	# Newest 1st.
+	# shellcheck disable=SC2012
 	ls -dqtF "$RSYNC_BACKUP_MAIN_PATH"* 2>/dev/null | nl
 }
 
@@ -227,7 +229,7 @@ function restore_rsync_backup()
 		<(list_rsync_backup | cut -f 2)
 		if [ "$num_backup" -gt 0 ] && [ "$which_backup" -gt 0 ] && \
 			[ "$which_backup" -le "$num_backup" ]; then
-			backup="${backup_list[$(($which_backup-1))]}"
+			backup="${backup_list[$((which_backup-1))]}"
 			log "Restoring $backup to $RESTORE_DIR."
 			# A moment of silence before your system breaks down completely.
 			sleep 5
@@ -239,7 +241,7 @@ function restore_rsync_backup()
 				log "Restoring $backup to $RESTORE_DIR - FAILED."
 			fi
 		else
-			log "Available backups: ${backup_list[@]}."
+			log "Available backups: ${backup_list[*]}."
 			log "Invalid backup selection $which_backup."
 		fi
 	fi
@@ -401,6 +403,7 @@ if [ "$TEST" ]; then
 		echo
 		m_action=6
 	else
+		# shellcheck disable=SC1090
 		source "$TEST"
 	fi
 else
@@ -409,16 +412,19 @@ else
 		echo
 		m_action=6
 	else
+		# shellcheck source=backup.conf.example
 		source "$CONF_PATH"
 	fi
 fi
 
+# shellcheck source=backup.conf.example
 source "$LIB_PATH"
 
 # Gives resolved absolute path, gets rid of trailing slashes.
 SOURCE_DIR="$(realpath -sm $SOURCE_DIR)"
 RESTORE_DIR="$(realpath -sm $RESTORE_DIR)"
 STORAGE_DIR="$(realpath -sm $STORAGE_DIR)"
+# shellcheck disable=SC2086
 RSYNC_BACKUP_MAIN_PATH="$(realpath -sm $STORAGE_DIR)"/"$RSYNC_BACKUP_PREFIX"
 BACKUP_DIR="$RSYNC_BACKUP_MAIN_PATH"-"$TIMESTAMP"
 BACKUP_ARCHIVE_DIR="$(realpath -sm $BACKUP_ARCHIVE_DIR)"

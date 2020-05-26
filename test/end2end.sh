@@ -27,7 +27,8 @@ _create_loop_dev()
 	local l_db="$1"
 	local l_path="${2:-.}"
 	local l_size="${3:-5M}"
-	local l_loop="$(losetup -f)"
+	local l_loop=""
+	l_loop="$(losetup -f)"
 
 	if ( dd if=/dev/zero of="$l_db" bs="$l_size" count=1 && \
 	losetup -fP "$l_db" && mkfs.ext4 "$l_db" && mkdir -p "$l_path" && \
@@ -123,6 +124,7 @@ test_suite_setup()
 	echo "${FUNCNAME[0]}"
 	local l_rc=1
 
+	# shellcheck source=end2end.template.conf
 	if source "$TEST_CONFIG_TEMPLATE"; then
 		if [ "$DEBUG" ]; then
 			BACKUP_SCRIPT="TEST=$TEST_CONFIG ../rsync_backup.sh"
@@ -150,10 +152,7 @@ test_suite_teardown()
 		echo 'DEBUG: skipping teardown actions.'
 		l_rc=0
 	else
-		for mnt in $(find $TEST_MAIN_DIR \
-		-depth ! -type l -exec mountpoint -q {} \; -print); do
-			umount "$mnt"
-		done
+		find $TEST_MAIN_DIR -depth ! -type l -exec mountpoint -q {} \; -exec umount {} \;
 		if losetup --detach-all && rm -r "$TEST_MAIN_DIR"; then
 			l_rc=0
 		fi
@@ -189,7 +188,7 @@ all_tests()
 	for tst in "test_rotation" "test_restore" "test_archive_rotation" \
 	"test_no_space_storage" "test_no_space_archive"; do
 		if ! $tst; then
-			TEST_RESULT="$(($TEST_RESULT+1))"
+			TEST_RESULT="$((TEST_RESULT+1))"
 		fi
 	done
 
@@ -213,9 +212,9 @@ test_rotation()
 	if test_setup "$l_test_tag"; then
 		create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
 
-		for ((i=0; i<=$MAX_BACKUPS; i++)); do
-			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}* | wc -l)"
+		for ((i=0; i<=MAX_BACKUPS; i++)); do
+			l_num_backups="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*" | wc -l)"
 			if [ "$l_num_backups" -ne "$i" ]; then
 				echo "Rotation failed at $i/$MAX_BACKUPS."
 				l_rc=1
@@ -230,9 +229,9 @@ test_rotation()
 			# Test a single rotation.
 			sleep 1
 			eval "$BACKUP_SCRIPT --backup"
-			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}* | wc -l)"
-			if [ "$l_num_backups" -ne "$(($MAX_BACKUPS))" ]; then
+			l_num_backups="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*" | wc -l)"
+			if [ "$l_num_backups" -ne "$((MAX_BACKUPS))" ]; then
 				echo "Rotation failed at deletion after max ($MAX_BACKUPS) backups."
 				l_rc=1
 			fi
@@ -267,13 +266,13 @@ test_archive_rotation()
 
 		create_dummy_file "${FUNCNAME[0]}" "${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
 
-		for ((i=0; i<=$MAX_BACKUPS; i++)); do
-			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}* | wc -l)"
-			l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
-			l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_GPG_SUFFIX} | wc -l)"
+		for ((i=0; i<=MAX_BACKUPS; i++)); do
+			l_num_backups="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*" | wc -l)"
+			l_num_archives="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_ARCHIVE_SUFFIX}" | wc -l)"
+			l_num_gpgs="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_GPG_SUFFIX}" | wc -l)"
 			if [ "$l_num_backups" -ne "$i" ] || [ "$l_num_archives" -ne "$i" ] || \
 			[ "$l_num_gpgs" -ne "$i" ]; then
 				echo "Rotation failed at $i/$MAX_BACKUPS."
@@ -292,12 +291,12 @@ test_archive_rotation()
 			sleep 1
 			eval "$BACKUP_SCRIPT --backup"
 			eval "$BACKUP_SCRIPT --archive"
-			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}* | wc -l)"
-			l_num_archives="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_ARCHIVE_SUFFIX} | wc -l)"
-			l_num_gpgs="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_GPG_SUFFIX} | wc -l)"
+			l_num_backups="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*" | wc -l)"
+			l_num_archives="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_ARCHIVE_SUFFIX}" | wc -l)"
+			l_num_gpgs="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_GPG_SUFFIX}" | wc -l)"
 			if [ "$l_num_backups" -ne "$MAX_BACKUPS" ] || \
 			[ "$l_num_archives" -ne "$MAX_BACKUPS" ] || \
 			[ "$l_num_gpgs" -ne "$MAX_BACKUPS" ]; then
@@ -333,21 +332,21 @@ test_restore()
 
 	if test_setup "$l_test_tag"; then
 		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
-		for ((i=1; i<=$MAX_BACKUPS; i++)); do
+		for ((i=1; i<=MAX_BACKUPS; i++)); do
 			create_dummy_file "$i" "$l_tst_file"
 			sleep 1
 			eval "$BACKUP_SCRIPT --backup"
 		done
 
-		for ((i=$MAX_BACKUPS; i>=1; --i)); do
+		for ((i=MAX_BACKUPS; i>=1; --i)); do
 			eval "$BACKUP_SCRIPT --restore $i"
-			content="$(cat $l_tst_file)"
+			content="$(cat "$l_tst_file")"
 			l_cmd_rc="$?"
 			if [ "$l_cmd_rc" -ne "0" ]; then
 				l_rc=1
 				break
 			# Last backup is oldest - has smalles number as file contnetn.
-			elif [ "$content" -ne "$(($MAX_BACKUPS-$i+1))" ]; then
+			elif [ "$content" -ne "$((MAX_BACKUPS-i+1))" ]; then
 				echo "Restoration failed at backup $i."
 				l_rc=1
 				break
@@ -387,14 +386,14 @@ test_no_space_storage()
 		l_tst_file="${TEST_MNT[test_root.db]}/${FUNCNAME[0]}.txt"
 		if dd if=/dev/zero of="$l_tst_file" bs=3M count=1 2>/dev/null; then
 			eval "$BACKUP_SCRIPT --backup"
-			l_backup_pre="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}*)"
+			l_backup_pre="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*")"
 			sleep 1
 			eval "$BACKUP_SCRIPT --backup"
-			l_num_backups="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}* | wc -l)"
-			l_backup_post="$(find ${TEST_MNT[test_storage.db]} -mindepth 1 -type d -name \
-			${RSYNC_BACKUP_PREFIX}*)"
+			l_num_backups="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*" | wc -l)"
+			l_backup_post="$(find "${TEST_MNT[test_storage.db]}" -mindepth 1 -type d -name \
+			"${RSYNC_BACKUP_PREFIX}*")"
 			if [ "$l_num_backups" -eq "1" ] && \
 			[ "$l_backup_pre" == "$l_backup_post" ]; then
 				l_rc=0
@@ -433,15 +432,15 @@ test_no_space_archive()
 		if dd if=/dev/urandom of="$l_tst_file" bs=1M count=1 2>/dev/null; then
 			eval "$BACKUP_SCRIPT --backup"
 			eval "$BACKUP_SCRIPT --archive"
-			l_backup_pre="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_GPG_SUFFIX})"
+			l_backup_pre="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_GPG_SUFFIX}")"
 			sleep 1
 			eval "$BACKUP_SCRIPT --backup"
 			eval "$BACKUP_SCRIPT --archive"
-			l_num_backups="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_GPG_SUFFIX} | wc -l)"
-			l_backup_post="$(find ${TEST_MNT[test_archive.db]} -mindepth 1 -type f -name \
-			*${BACKUP_GPG_SUFFIX})"
+			l_num_backups="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_GPG_SUFFIX}" | wc -l)"
+			l_backup_post="$(find "${TEST_MNT[test_archive.db]}" -mindepth 1 -type f -name \
+			"*${BACKUP_GPG_SUFFIX}")"
 			if [ "$l_num_backups" -eq "1" ] && \
 			[ "$l_backup_pre" == "$l_backup_post" ]; then
 				l_rc=0
