@@ -189,7 +189,7 @@ function rotate_gpg2_backup()
 	local list_gpg2="ls -qt ${BACKUP_GPG_ARCHIVE_DIR}/*${BACKUP_GPG_SUFFIX}"
 	local rm_gpg2="rm"
 
-    (_rotate_backup "$num_gpg2" "$list_gpg2" "$rm_gpg2")
+	(_rotate_backup "$num_gpg2" "$list_gpg2" "$rm_gpg2")
 	ret_code="${?:-1}"
 
 
@@ -351,17 +351,17 @@ function help_text
 	cat <<- _EOF_
 	Usage:
 	rsync_backup {-b | --backup} {-r | --restore <num>} {-l | --list} {-h | --help}
-	
+
 	-b | --backup         Create a backup as per configurations (requires sudo).
 	-r | --restore <num>  Restore backup <num>: 1 - latest backup (requires sudo).
 	-l | --list           Lists & numbers the available backups: 1 - latest backup.
 	--archive             Archive, encrypt and possibly send over ssh.
 	-h | --help           Show this help message.
-	
+
 	If you want to keep a particular backup, rename it so the script won't be able
 	to list it, or copy it to another dir. If you need to copy a backup, use the
 	same rsync command as the script to preserve the attributes.
-	
+
 	For restoring, the file name should start with the backup prefix, so the
 	script can list/use it.
 	_EOF_
