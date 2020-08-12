@@ -2,7 +2,6 @@
 
 function log()
 {
-	local prio="${2:-info}"
 
 	echo "$1"
 
@@ -37,7 +36,7 @@ function _rotate_backup()
 	local cmd_code
 	local msg
 
-	if [ "$count_cmd" != "None" ] && [ "$list_cmd" != "None" ]\
+	if [ "$count_cmd" != "None" ] && [ "$list_cmd" != "None" ] \
 	&& [ "$rm_cmd" != "None" ]; then
 		num_backup="$($count_cmd)"
 		cmd_code=$?
