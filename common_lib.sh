@@ -1,4 +1,7 @@
+#!/usr/bin/env bash
 # Common functions for the backup and archive scripts.
+# Use shebang so shellcheck does not complain about syntax,
+# otherwise the file is not executable - only has function defs.
 
 function log()
 {
